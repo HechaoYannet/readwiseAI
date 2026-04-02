@@ -342,7 +342,7 @@ POST /api/attempt
 | `question_expert` | `sub_agents/question.py` | 阅读理解题目生成（细节/推断/词义） |
 | `qa_expert` | `sub_agents/qa.py` | 单词查询（有道）、句子解析、语法讲解、翻译 |
 
-所有 Sub-Agent 继承自 `BaseSubAgent`，通过 `_call_llm(prompt)` 调用 LLM，由 Dispatcher 同步执行。
+所有 Sub-Agent 继承自 `BaseSubAgent`，通过 `_call_llm(prompt)` 调用 LLM，由 Dispatcher 同步执行(仅内测期间)。
 
 ---
 
