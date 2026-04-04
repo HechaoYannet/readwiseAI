@@ -24,6 +24,8 @@ data/checkpoints/
 data/results/
 data/tasks/
 data/sqlite/
+data/working/sessions/
+data/long_term/
 
 # Pytest cache
 .pytest_cache/

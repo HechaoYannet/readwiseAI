@@ -30,6 +30,44 @@ def _get_sub_agent(name: str) -> Optional[Any]:
     return None
 
 
+def _build_memory_context(state: OrchestratorState) -> Dict[str, Any]:
+    """Load working memory and long-term memory objects for the current request.
+
+    Returns a context dict ready to be merged into the agent execution context.
+    Errors are caught and logged so they never block task execution.
+    """
+    ctx: Dict[str, Any] = {}
+
+    # Working memory
+    session_id = state.session_id or state.request_id
+    try:
+        from app.models.working_memory import WorkingMemory
+
+        ctx["working_memory"] = WorkingMemory.get_or_create(
+            session_id=session_id, user_id=state.user_id
+        )
+    except Exception as exc:
+        logger.warning("Could not load working memory: %s", exc)
+
+    # Long-term memory
+    try:
+        from app.models.long_term_memory import LongTermMemory
+
+        ctx["long_term_memory"] = LongTermMemory(user_id=state.user_id)
+    except Exception as exc:
+        logger.warning("Could not load long-term memory: %s", exc)
+
+    # Corpus repository
+    try:
+        from app.tools.corpus_repo import get_corpus_repo
+
+        ctx["corpus_repo"] = get_corpus_repo()
+    except Exception as exc:
+        logger.warning("Could not load corpus repo: %s", exc)
+
+    return ctx
+
+
 class Dispatcher:
     async def dispatch_all_pending(
         self, state: OrchestratorState
@@ -66,6 +104,9 @@ class Dispatcher:
                 "user_id": state.user_id,
                 "completed_results": state.completed_results,
             }
+            # Inject memory context
+            context.update(_build_memory_context(state))
+
             result = await agent.execute(task.input, context)
             task.result = result
             # Mark as completed here so verifier can inspect it

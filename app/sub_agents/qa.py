@@ -1,14 +1,22 @@
-"""QAExpert – 查词、长难句拆解、语法解释、翻译."""
+"""QAExpert – 问答专家（基于LangChain工具调用）.
+
+支持：查词、长难句拆解、语法解释、翻译，以及通过工具自主访问
+当前文章、错题本、语料库等记忆。
+"""
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.sub_agents.base import BaseSubAgent
 from app.tools.dictionary import lookup_word
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Fallback inline prompts (used when prompt file absent or for direct calls)
+# ---------------------------------------------------------------------------
 
 SENTENCE_PARSE_PROMPT = """
 你是英语语言学专家。请拆解以下英语长难句的句子结构。
@@ -54,10 +62,13 @@ TRANSLATE_PROMPT = """
 }}
 """
 
+# Maximum number of tool call iterations to prevent runaway loops
+_MAX_TOOL_CALLS = 5
+
 
 class QAExpert(BaseSubAgent):
     name = "qa_expert"
-    description = "查词、长难句拆解、语法解释、翻译"
+    description = "查词、长难句拆解、语法解释、翻译，支持通过工具访问文章和错题本"
 
     async def execute(
         self, input: Dict[str, Any], context: Dict[str, Any]
@@ -67,6 +78,11 @@ class QAExpert(BaseSubAgent):
         content = input.get("content", "")
         context_sentence = input.get("context_sentence", "")
 
+        # Check if we have memory context – if so, use tool-calling for free-form questions
+        has_memory = bool(
+            context.get("working_memory") or context.get("long_term_memory")
+        )
+
         if query_type == "word":
             result = await self._handle_word(content, context_sentence)
         elif query_type == "sentence":
@@ -75,11 +91,19 @@ class QAExpert(BaseSubAgent):
             result = await self._handle_grammar(content)
         elif query_type == "translate":
             result = await self._handle_translate(content)
+        elif query_type == "free" and has_memory:
+            result = await self._handle_free_with_tools(content, context)
+        elif query_type == "free":
+            result = await self._handle_free_simple(content)
         else:
             result = {"error": f"Unknown query_type: {query_type}"}
 
         result["metadata"] = {"latency_ms": self._timed(start), "agent": self.name}
         return result
+
+    # ------------------------------------------------------------------
+    # Structured query handlers
+    # ------------------------------------------------------------------
 
     async def _handle_word(self, word: str, ctx: str) -> Dict[str, Any]:
         basic = await lookup_word(word)
@@ -110,3 +134,96 @@ class QAExpert(BaseSubAgent):
         prompt = TRANSLATE_PROMPT.format(content=content)
         result = await self._call_llm(prompt)
         return result or {"error": "翻译失败"}
+
+    # ------------------------------------------------------------------
+    # Free-form query with LangChain tool-calling
+    # ------------------------------------------------------------------
+
+    async def _handle_free_with_tools(
+        self, user_question: str, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Use LangChain tool-calling to answer a free-form question.
+
+        Configures the memory tools with the current context and invokes
+        the LLM with tool-use capability, iterating up to _MAX_TOOL_CALLS times.
+        """
+        try:
+            from app.tools.memory_tools import configure_tools, ALL_TOOLS
+            from app.services.llm_service import get_llm
+            from langchain_core.messages import HumanMessage, ToolMessage
+
+            configure_tools(
+                working_memory=context.get("working_memory"),
+                long_term_memory=context.get("long_term_memory"),
+                corpus_repo=context.get("corpus_repo"),
+            )
+
+            llm = get_llm()
+            try:
+                llm_with_tools = llm.bind_tools(ALL_TOOLS)
+            except (AttributeError, NotImplementedError):
+                logger.warning("LLM does not support tool binding; falling back to simple call")
+                return await self._handle_free_simple(user_question)
+
+            messages: List[Any] = [HumanMessage(content=user_question)]
+            tool_calls_made = 0
+            tool_results: List[str] = []
+            response: Any = None
+
+            for _ in range(_MAX_TOOL_CALLS):
+                response = await llm_with_tools.ainvoke(messages)
+                messages.append(response)
+
+                if not hasattr(response, "tool_calls") or not response.tool_calls:
+                    break
+
+                for tc in response.tool_calls:
+                    tool_name = tc.get("name", "")
+                    tool_args = tc.get("args", {})
+                    tool_id = tc.get("id", tool_name)
+
+                    tool_result = self._invoke_tool(tool_name, tool_args)
+                    tool_results.append(f"[{tool_name}]: {tool_result}")
+                    messages.append(
+                        ToolMessage(content=tool_result, tool_call_id=tool_id)
+                    )
+                    tool_calls_made += 1
+
+            final_content = (
+                response.content
+                if response is not None and hasattr(response, "content") and response.content
+                else "（无法生成回答）"
+            )
+            return {
+                "answer": final_content,
+                "references": tool_results,
+                "tool_calls_made": tool_calls_made,
+            }
+
+        except Exception as exc:
+            logger.error("Tool-calling QA failed: %s", exc)
+            return await self._handle_free_simple(user_question)
+
+    def _invoke_tool(self, tool_name: str, args: Dict[str, Any]) -> str:
+        """Synchronously invoke a named tool and return its string result."""
+        from app.tools import memory_tools as mt
+        tool_map = {t.name: t for t in mt.ALL_TOOLS}
+        tool_fn = tool_map.get(tool_name)
+        if tool_fn is None:
+            return f"（未知工具: {tool_name}）"
+        try:
+            result = tool_fn.invoke(args)
+            return str(result)[:1500]  # Cap output to avoid context overflow
+        except Exception as exc:
+            logger.warning("Tool %s raised an error: %s", tool_name, exc)
+            return f"（工具调用失败: {exc}）"
+
+    async def _handle_free_simple(self, user_question: str) -> Dict[str, Any]:
+        """Simple free-form QA without tools, used as fallback."""
+        prompt = (
+            f"你是高考英语学习助手。请简洁、准确地回答以下问题。\n\n"
+            f"问题：{user_question}\n\n"
+            f'输出JSON：{{"answer": "...", "references": [], "follow_up": "..."}}'
+        )
+        result = await self._call_llm(prompt)
+        return result or {"answer": "（暂时无法回答，请重试）", "references": []}
