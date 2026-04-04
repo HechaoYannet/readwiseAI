@@ -50,6 +50,10 @@ class OrchestratorState(BaseModel):
     error_log: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+    # Memory context – populated by the Dispatcher before agent execution
+    session_id: Optional[str] = None
+    working_memory: Optional[Dict[str, Any]] = None
+    long_term_memory: Optional[Dict[str, Any]] = None
 
 
 class AttemptRequest(BaseModel):
@@ -70,5 +74,7 @@ class AttemptRequest(BaseModel):
     topic: Optional[str] = None
     word_count: Optional[int] = None
     article: Optional[str] = None
-    question_type: Optional[str] = None  # detail/inference/vocabulary
+    question_type: Optional[str] = None  # detail/inference/vocabulary/main_idea
+    question_types: Optional[List[str]] = None  # list of question types for multi-question
     count: Optional[int] = None
+    session_id: Optional[str] = None  # session identifier for working memory

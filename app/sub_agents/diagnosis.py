@@ -82,7 +82,9 @@ class DiagnosisExpert(BaseSubAgent):
                 "confidence": 1.0,
             }
 
-        prompt = DIAGNOSIS_PROMPT.format(
+        # Try to load prompt from file; fall back to inline template
+        template = self.load_prompt("diagnosis_prompt") or DIAGNOSIS_PROMPT
+        prompt = template.format(
             paragraph=input.get("paragraph", ""),
             question_text=input.get("question_text", ""),
             options=input.get("options", {}),

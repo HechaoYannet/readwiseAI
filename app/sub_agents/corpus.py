@@ -68,11 +68,14 @@ class CorpusExpert(BaseSubAgent):
         topic = input.get("topic", "technology")
         word_count = input.get("word_count", 300)
 
+        # Load prompt template from file; fall back to inline template
+        template = self.load_prompt("corpus_prompt") or ARTICLE_PROMPT
+
         article: Dict[str, Any] = {}
         validation: Dict[str, Any] = {"passed": False, "issues": []}
 
         for attempt in range(3):
-            prompt = ARTICLE_PROMPT.format(
+            prompt = template.format(
                 difficulty=difficulty,
                 genre=genre,
                 topic=topic,

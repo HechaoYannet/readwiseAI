@@ -1,0 +1,32 @@
+{
+  "articles": {
+    "gk_2024_001": {
+      "metadata": {
+        "id": "gk_2024_001",
+        "source": "2024全国I卷",
+        "type": "真题",
+        "difficulty": "L3",
+        "genre": "argumentative",
+        "word_count": 342
+      },
+      "path": "gk_2024_001.md"
+    }
+  },
+  "indexes": {
+    "by_difficulty": {
+      "L1": [],
+      "L2": [],
+      "L3": ["gk_2024_001"],
+      "L4": []
+    },
+    "by_genre": {
+      "argumentative": ["gk_2024_001"],
+      "expository": [],
+      "narrative": []
+    },
+    "by_type": {
+      "真题": ["gk_2024_001"],
+      "模拟题": []
+    }
+  }
+}
