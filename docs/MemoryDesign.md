@@ -478,7 +478,8 @@ def example_tool(param: str) -> str:
 ```python
 from pathlib import Path
 
-PROMPT_DIR = Path("data/prompts")
+PROMPT_DIR = Path("../data/prompts")
+
 
 def load_prompt(name: str) -> str:
     path = PROMPT_DIR / f"{name}.txt"
