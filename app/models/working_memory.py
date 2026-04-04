@@ -48,15 +48,16 @@ class WorkingMemory(BaseModel):
 
     def save(self) -> None:
         """Persist this working memory to disk."""
-        _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        user_dir = _SESSIONS_DIR / self.user_id
+        user_dir.mkdir(parents=True, exist_ok=True)
         self.updated_at = datetime.now().isoformat()
-        path = _SESSIONS_DIR / f"{self.session_id}.json"
+        path = user_dir / f"{self.session_id}.json"
         path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, session_id: str) -> Optional["WorkingMemory"]:
+    def load(cls, session_id: str, user_id: str = "default") -> Optional["WorkingMemory"]:
         """Load working memory from disk.  Returns None if not found."""
-        path = _SESSIONS_DIR / f"{session_id}.json"
+        path = _SESSIONS_DIR / user_id / f"{session_id}.json"
         if not path.exists():
             return None
         try:
@@ -69,7 +70,7 @@ class WorkingMemory(BaseModel):
     @classmethod
     def get_or_create(cls, session_id: str, user_id: str) -> "WorkingMemory":
         """Load existing session or create a new one."""
-        existing = cls.load(session_id)
+        existing = cls.load(session_id, user_id)
         if existing is not None:
             return existing
         wm = cls(session_id=session_id, user_id=user_id)
