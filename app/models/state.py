@@ -57,7 +57,6 @@ class OrchestratorState(BaseModel):
 
 
 class AttemptRequest(BaseModel):
-    user_id: str
     paragraph: str = ""
     question_text: str = ""
     options: Dict[str, str] = Field(default_factory=dict)

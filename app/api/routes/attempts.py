@@ -4,8 +4,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
 
+from app.auth.dependencies import get_current_user
+from app.auth.models import TokenData
 from app.models.state import AttemptRequest, OrchestratorState, RequestStatus
 from app.orchestrator.agent import get_orchestrator
 from app.orchestrator.checkpoint import get_checkpoint_manager
@@ -21,14 +23,20 @@ def _generate_request_id() -> str:
 async def submit_attempt(
     attempt: AttemptRequest,
     background_tasks: BackgroundTasks,
+    token_data: TokenData = Depends(get_current_user),
 ):
-    """Submit a user attempt; returns a request_id for later polling."""
+    """Submit a user attempt; returns a request_id for later polling.
+
+    The caller must provide a valid JWT Bearer token.  The user_id is taken
+    from the token and must NOT be supplied in the request body.
+    """
+    user_id = token_data.user_id
     request_id = _generate_request_id()
     now = datetime.now()
 
     state = OrchestratorState(
         request_id=request_id,
-        user_id=attempt.user_id,
+        user_id=user_id,
         status=RequestStatus.PENDING,
         original_request=attempt.model_dump(),
         created_at=now,

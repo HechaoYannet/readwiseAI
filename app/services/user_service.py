@@ -12,6 +12,19 @@ logger = logging.getLogger(__name__)
 _user_store = UserStore()
 _invite_store = InviteStore()
 
+_PASSWORD_MIN_LEN = 8
+_PASSWORD_MAX_LEN = 20
+
+
+def _validate_password(password: str, confirm: str) -> Tuple[bool, str]:
+    if not password:
+        return False, "密码不能为空"
+    if len(password) < _PASSWORD_MIN_LEN or len(password) > _PASSWORD_MAX_LEN:
+        return False, f"密码长度须在 {_PASSWORD_MIN_LEN}–{_PASSWORD_MAX_LEN} 位之间"
+    if password != confirm:
+        return False, "两次密码不一致"
+    return True, ""
+
 
 def verify_invite_code(code: str) -> Tuple[bool, str]:
     """Check if an invite code is valid.
@@ -35,6 +48,8 @@ def register_user(
     invite_code: str,
     username: str,
     exam_region: str,
+    password: str = "",
+    confirm_password: str = "",
     grade: str = "",
     school: str = "",
     client_ip: str = "",
@@ -52,8 +67,17 @@ def register_user(
     if _user_store.get_by_username(username) is not None:
         return None, "用户名已被占用"
 
+    # Validate password
+    ok, err = _validate_password(password, confirm_password)
+    if not ok:
+        return None, err
+
+    from app.auth.password import hash_password
+    hashed = hash_password(password)
+
     user = User(
         username=username,
+        password_hash=hashed,
         invite_code=invite_code,
         exam_region=exam_region,
         grade=grade,
@@ -78,6 +102,58 @@ def register_user(
         )
 
     return user, ""
+
+
+def login_user(login_id: str, password: str) -> Tuple[Optional[User], str]:
+    """Authenticate a user by username / phone / email + password.
+
+    Returns:
+        (user, error_message) – user is None if authentication failed.
+    """
+    user = (
+        _user_store.get_by_username(login_id)
+        or _user_store.get_by_phone(login_id)
+        or _user_store.get_by_email(login_id)
+    )
+    if user is None:
+        return None, "用户名或密码错误"
+
+    from app.auth.password import verify_password
+    if not verify_password(password, user.password_hash):
+        return None, "用户名或密码错误"
+
+    if user.status != UserStatus.ACTIVE:
+        return None, "账号已被禁用"
+
+    # Update last login timestamp
+    _user_store.update(user.id, last_login_at=datetime.now(timezone.utc).isoformat())
+
+    return user, ""
+
+
+def change_password(
+    user_id: str, old_password: str, new_password: str, confirm_password: str
+) -> Tuple[bool, str, str]:
+    """Change a user's password after verifying the old one.
+
+    Returns:
+        (success, error_message, error_code)  error_code is "" on success.
+    """
+    user = _user_store.get_by_id(user_id)
+    if user is None:
+        return False, "用户不存在", "USER_NOT_FOUND"
+
+    from app.auth.password import hash_password, verify_password
+    if not verify_password(old_password, user.password_hash):
+        return False, "旧密码错误", "OLD_PASSWORD_INCORRECT"
+
+    ok, err = _validate_password(new_password, confirm_password)
+    if not ok:
+        return False, err, "INVALID_PASSWORD"
+
+    new_hash = hash_password(new_password)
+    _user_store.update(user_id, password_hash=new_hash)
+    return True, "", ""
 
 
 def get_user(user_id: str) -> Optional[User]:
@@ -151,3 +227,4 @@ def get_invite(code: str) -> Optional[InviteCode]:
 
 def revoke_invite(code: str) -> bool:
     return _invite_store.revoke(code)
+

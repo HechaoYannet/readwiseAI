@@ -50,7 +50,7 @@ class TestStateModels:
     def test_attempt_request_defaults(self):
         from app.models.state import AttemptRequest
 
-        req = AttemptRequest(user_id="u1")
+        req = AttemptRequest()
         assert req.request_type == "attempt"
         assert req.user_answer == ""
 
@@ -65,8 +65,8 @@ class TestCheckpointManager:
         from app.models.state import OrchestratorState
 
         cm = CheckpointManager(
-            checkpoint_dir=tmp_path / "checkpoints",
-            results_dir=tmp_path / "results",
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
         )
         state = OrchestratorState(request_id="req_abc", user_id="u1")
         cm.save(state)
@@ -79,8 +79,8 @@ class TestCheckpointManager:
         from app.orchestrator.checkpoint import CheckpointManager
 
         cm = CheckpointManager(
-            checkpoint_dir=tmp_path / "checkpoints",
-            results_dir=tmp_path / "results",
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
         )
         assert cm.load("does_not_exist") is None
 
@@ -89,25 +89,41 @@ class TestCheckpointManager:
         from app.models.state import OrchestratorState
 
         cm = CheckpointManager(
-            checkpoint_dir=tmp_path / "checkpoints",
-            results_dir=tmp_path / "results",
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
         )
         state = OrchestratorState(request_id="req_del", user_id="u1")
         cm.save(state)
         cm.delete("req_del")
+        # Checkpoint file is gone; index entry kept for ownership lookup
         assert cm.load("req_del") is None
+        # Index entry still present
+        assert cm.lookup_user_id("req_del") == "u1"
 
     def test_save_and_load_result(self, tmp_path):
         from app.orchestrator.checkpoint import CheckpointManager
 
         cm = CheckpointManager(
-            checkpoint_dir=tmp_path / "checkpoints",
-            results_dir=tmp_path / "results",
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
         )
-        cm.save_result("req_r", {"status": "completed", "results": {}})
-        r = cm.load_result("req_r")
+        cm.save_result("req_r", "u1", {"status": "completed", "results": {}})
+        r = cm.load_result("req_r", "u1")
         assert r is not None
         assert r["status"] == "completed"
+
+    def test_lookup_user_id(self, tmp_path):
+        from app.orchestrator.checkpoint import CheckpointManager
+        from app.models.state import OrchestratorState
+
+        cm = CheckpointManager(
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
+        )
+        state = OrchestratorState(request_id="req_idx", user_id="alice")
+        cm.save(state)
+        assert cm.lookup_user_id("req_idx") == "alice"
+        assert cm.lookup_user_id("req_unknown") is None
 
 
 # ===================================================================
@@ -471,19 +487,26 @@ def client(tmp_path):
     ag_module._orchestrator = None
 
     # Patch checkpoint dirs to use tmp_path
-    original_checkpoint_dir = cp_module.CHECKPOINT_DIR
-    original_results_dir = cp_module.RESULTS_DIR
-    cp_module.CHECKPOINT_DIR = tmp_path / "checkpoints"
-    cp_module.RESULTS_DIR = tmp_path / "results"
+    original_base_dir = cp_module.BASE_DIR
+    original_index_dir = cp_module.INDEX_DIR
+    cp_module.BASE_DIR = tmp_path / "users"
+    cp_module.INDEX_DIR = tmp_path / "request_index"
 
     from app.main import app
     with TestClient(app, raise_server_exceptions=True) as c:
         yield c
 
-    cp_module.CHECKPOINT_DIR = original_checkpoint_dir
-    cp_module.RESULTS_DIR = original_results_dir
+    cp_module.BASE_DIR = original_base_dir
+    cp_module.INDEX_DIR = original_index_dir
     cp_module._checkpoint_manager = None
     ag_module._orchestrator = None
+
+
+def _make_auth_header(user_id: str = "u1", role: str = "user") -> dict:
+    """Create an Authorization header with a valid JWT for the given user."""
+    from app.auth.jwt_handler import create_access_token
+    token = create_access_token(user_id=user_id, role=role)
+    return {"Authorization": f"Bearer {token}"}
 
 
 class TestAPIRoutes:
@@ -492,11 +515,10 @@ class TestAPIRoutes:
         assert r.status_code == 200
         assert "ReadWise AI" in r.json()["message"]
 
-    def test_submit_attempt_returns_request_id(self, client):
+    def test_submit_attempt_requires_auth(self, client):
         r = client.post(
             "/api/attempt",
             json={
-                "user_id": "u1",
                 "paragraph": "The sun rises in the east.",
                 "question_text": "Where does the sun rise?",
                 "options": {"A": "East", "B": "West", "C": "North", "D": "South"},
@@ -505,22 +527,55 @@ class TestAPIRoutes:
                 "time_spent": 30,
             },
         )
+        assert r.status_code == 401
+
+    def test_submit_attempt_returns_request_id(self, client):
+        r = client.post(
+            "/api/attempt",
+            json={
+                "paragraph": "The sun rises in the east.",
+                "question_text": "Where does the sun rise?",
+                "options": {"A": "East", "B": "West", "C": "North", "D": "South"},
+                "user_answer": "B",
+                "correct_answer": "A",
+                "time_spent": 30,
+            },
+            headers=_make_auth_header("u1"),
+        )
         assert r.status_code == 200
         data = r.json()
         assert "request_id" in data
         assert data["request_id"].startswith("req_")
         assert data["status"] == "processing"
 
-    def test_get_result_not_found(self, client):
+    def test_get_result_requires_auth(self, client):
         r = client.get("/api/result/req_nonexistent")
-        assert r.status_code == 404
+        assert r.status_code == 401
 
-    def test_get_result_processing(self, client, tmp_path):
+    def test_get_result_not_found(self, client):
+        r = client.get("/api/result/req_nonexistent", headers=_make_auth_header("u1"))
+        assert r.status_code == 200
+        assert r.json()["status"] == "not_found"
+
+    def test_get_result_forbidden_other_user(self, client):
+        """User A cannot read results belonging to User B."""
+        # Submit as u1
+        post = client.post(
+            "/api/attempt",
+            json={"paragraph": "test", "question_text": "q?",
+                  "options": {"A": "a"}, "user_answer": "A", "correct_answer": "A"},
+            headers=_make_auth_header("u1"),
+        )
+        req_id = post.json()["request_id"]
+        # Poll as u2
+        r = client.get(f"/api/result/{req_id}", headers=_make_auth_header("u2"))
+        assert r.status_code == 403
+
+    def test_get_result_processing(self, client):
         """Submit then immediately poll – should see 'processing' or completed."""
         r = client.post(
             "/api/attempt",
             json={
-                "user_id": "u2",
                 "paragraph": "Water is essential for life.",
                 "question_text": "Why is water important?",
                 "options": {"A": "It is cold", "B": "It is essential", "C": "It is blue", "D": "It is wet"},
@@ -528,10 +583,11 @@ class TestAPIRoutes:
                 "correct_answer": "B",
                 "time_spent": 20,
             },
+            headers=_make_auth_header("u2"),
         )
         req_id = r.json()["request_id"]
         # Poll result – either processing or completed (background task may have run)
-        poll = client.get(f"/api/result/{req_id}")
+        poll = client.get(f"/api/result/{req_id}", headers=_make_auth_header("u2"))
         assert poll.status_code == 200
         assert poll.json()["status"] in ("processing", "completed", "failed")
 
@@ -539,13 +595,13 @@ class TestAPIRoutes:
         r = client.post(
             "/api/attempt",
             json={
-                "user_id": "u3",
                 "request_type": "corpus",
                 "difficulty": "L2",
                 "genre": "expository",
                 "topic": "technology",
                 "word_count": 200,
             },
+            headers=_make_auth_header("u3"),
         )
         assert r.status_code == 200
         assert r.json()["request_id"].startswith("req_")
@@ -554,11 +610,11 @@ class TestAPIRoutes:
         r = client.post(
             "/api/attempt",
             json={
-                "user_id": "u4",
                 "request_type": "qa",
                 "query_type": "word",
                 "content": "inevitable",
             },
+            headers=_make_auth_header("u4"),
         )
         assert r.status_code == 200
 
@@ -584,16 +640,16 @@ class TestOrchestration:
 
         cp_module._checkpoint_manager = None
         ag_module._orchestrator = None
-        cp_module.CHECKPOINT_DIR = tmp_path / "checkpoints"
-        cp_module.RESULTS_DIR = tmp_path / "results"
+        cp_module.BASE_DIR = tmp_path / "users"
+        cp_module.INDEX_DIR = tmp_path / "request_index"
 
         from app.models.state import OrchestratorState, RequestStatus
         from app.orchestrator.agent import Orchestrator
         from app.orchestrator.checkpoint import CheckpointManager
 
         cm = CheckpointManager(
-            checkpoint_dir=tmp_path / "checkpoints",
-            results_dir=tmp_path / "results",
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
         )
 
         request_id = "req_e2e_001"
@@ -606,7 +662,6 @@ class TestOrchestration:
             "user_answer": "A",
             "correct_answer": "B",
             "time_spent": 45,
-            "user_id": "u_test",
         }
 
         state = OrchestratorState(
@@ -637,7 +692,7 @@ class TestOrchestration:
             await orchestrator.process_request(request_id, user_request)
 
         # Result should be saved
-        result = cm.load_result(request_id)
+        result = cm.load_result(request_id, "u_test")
         assert result is not None
         assert result["status"] in (
             RequestStatus.COMPLETED,
