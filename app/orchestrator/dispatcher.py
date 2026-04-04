@@ -68,6 +68,29 @@ def _build_memory_context(state: OrchestratorState) -> Dict[str, Any]:
     return ctx
 
 
+def _resolve_task_inputs(task: SubTask, state: OrchestratorState) -> None:
+    """Resolve cross-task input placeholders before execution.
+
+    When a task input contains ``article_task_id``, that sibling task's
+    article content is injected into ``input["article"]`` at dispatch time.
+    This lets question tasks depend on corpus tasks without knowing the
+    article text at planning time.
+    """
+    article_task_id: Optional[str] = task.input.pop("article_task_id", None)
+    if not article_task_id:
+        return
+    sibling_result = state.completed_results.get(article_task_id, {})
+    article_content = sibling_result.get("article", {}).get("content", "")
+    if article_content:
+        task.input.setdefault("article", article_content)
+    else:
+        logger.warning(
+            "Could not resolve article from task %s for %s",
+            article_task_id,
+            task.sub_task_id,
+        )
+
+
 class Dispatcher:
     async def dispatch_all_pending(
         self, state: OrchestratorState
@@ -97,6 +120,9 @@ class Dispatcher:
             task.error_message = f"Unknown agent: {task.assigned_to}"
             state.error_log.append(task.error_message)
             return state
+
+        # Resolve cross-task input references before execution
+        _resolve_task_inputs(task, state)
 
         task.status = SubTaskStatus.RUNNING
         try:

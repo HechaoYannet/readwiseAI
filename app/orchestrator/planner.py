@@ -18,8 +18,12 @@ PLANNING_PROMPT = """
    - 适用场景：学生做错了题需要分析、需要同类题训练
 
 2. **corpus_expert**: 语料专家
-   - 能力：生成高考风格文章、控制难度(L1-L4)、控制体裁(议论文/说明文/记叙文)
-   - 适用场景：需要生成新文章、需要难度适配的阅读材料
+   - 能力：
+     a) 普通模式：按难度(L1-L4)、体裁(议论文/说明文/记叙文)、主题生成高考风格文章
+     b) 总体规划模式（enable_planning=true）：读取整个语料库 + 学生错题/战力值，
+        规划一组4篇文章的训练方案，返回 training_plan 并自动生成后续子任务
+     c) 风格化模式（reference_id 指定真题ID）：以真题为参考风格生成文章
+   - 适用场景：需要生成新文章、需要难度适配的阅读材料、需要生成完整训练题组
 
 3. **question_expert**: 出题专家
    - 能力：基于文章生成题目、设计选项、生成答案
@@ -97,6 +101,8 @@ def _make_rule_based_plan(user_request: Dict[str, Any]) -> Dict[str, Any]:
                         "genre": user_request.get("genre", "expository"),
                         "topic": user_request.get("topic", ""),
                         "word_count": user_request.get("word_count", 300),
+                        "reference_id": user_request.get("reference_id"),
+                        "description": user_request.get("description", ""),
                     },
                     "acceptance_criteria": ["文章字数在目标范围内", "体裁符合要求"],
                     "depends_on": [],
@@ -138,6 +144,31 @@ def _make_rule_based_plan(user_request: Dict[str, Any]) -> Dict[str, Any]:
                         "context_sentence": user_request.get("context_sentence", ""),
                     },
                     "acceptance_criteria": ["包含释义信息"],
+                    "depends_on": [],
+                }
+            ],
+        }
+
+    if request_type == "training_set":
+        return {
+            "overall_goal": "生成完整训练题组（总体规划 → 语料生成 → 出题）",
+            "sub_tasks": [
+                {
+                    "sub_task_id": "sub_000",
+                    "assigned_to": "corpus_expert",
+                    "description": (
+                        "读取语料库和学生学情，规划本次训练4篇文章（主题、"
+                        "参考真题、语法点、难度、字数等），返回训练计划并"
+                        "生成语料+出题子任务"
+                    ),
+                    "input": {
+                        "enable_planning": True,
+                        "user_level": user_request.get("user_level", "L2"),
+                    },
+                    "acceptance_criteria": [
+                        "包含 training_plan 字段",
+                        "training_plan 包含文章规划",
+                    ],
                     "depends_on": [],
                 }
             ],

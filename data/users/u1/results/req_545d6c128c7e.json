@@ -1,0 +1,21 @@
+{
+  "request_id": "req_545d6c128c7e",
+  "status": "completed",
+  "results": {
+    "sub_001": {
+      "diagnosis": {
+        "error_category": "未知",
+        "explanation": "分析失败，请重试",
+        "evidence_sentence": "",
+        "suggestion": "",
+        "confidence": 0.0
+      },
+      "similar_question": {},
+      "metadata": {
+        "latency_ms": 0,
+        "agent": "diagnosis_expert"
+      }
+    }
+  },
+  "error_log": []
+}

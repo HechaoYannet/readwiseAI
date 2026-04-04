@@ -1,0 +1,22 @@
+{
+  "request_id": "req_5038a58fb2a6",
+  "status": "completed",
+  "results": {
+    "sub_001": {
+      "word": "inevitable",
+      "basic_meaning": {
+        "word": "inevitable",
+        "phonetic": "",
+        "definitions": [
+          "[stub] inevitable: definition not available (no API key)"
+        ],
+        "web_translations": []
+      },
+      "metadata": {
+        "latency_ms": 0,
+        "agent": "qa_expert"
+      }
+    }
+  },
+  "error_log": []
+}
