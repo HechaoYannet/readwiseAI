@@ -28,6 +28,9 @@ class UserStatus(str, Enum):
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     username: str
+    password_hash: str = ""
+    phone: str = ""
+    email: str = ""
     invite_code: str
     exam_region: str
     grade: str = ""
@@ -72,6 +75,22 @@ class UserStore:
     def get_by_username(self, username: str) -> Optional[User]:
         for u in self._load_all():
             if u.get("username") == username:
+                return User(**u)
+        return None
+
+    def get_by_phone(self, phone: str) -> Optional[User]:
+        if not phone:
+            return None
+        for u in self._load_all():
+            if u.get("phone") == phone:
+                return User(**u)
+        return None
+
+    def get_by_email(self, email: str) -> Optional[User]:
+        if not email:
+            return None
+        for u in self._load_all():
+            if u.get("email") == email:
                 return User(**u)
         return None
 

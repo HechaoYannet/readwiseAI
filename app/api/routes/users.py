@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
-from app.auth.models import TokenData
+from app.auth.models import ChangePasswordRequest, TokenData
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -63,3 +63,23 @@ async def get_stats(token_data: TokenData = Depends(get_current_user)) -> Dict[s
         }
     except Exception:
         return {"user_id": user_id, "error": "Failed to retrieve stats"}
+
+
+@router.put("/password")
+async def change_password(
+    body: ChangePasswordRequest,
+    token_data: TokenData = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Change the current user's password."""
+    ok, err = user_service.change_password(
+        user_id=token_data.user_id,
+        old_password=body.old_password,
+        new_password=body.new_password,
+        confirm_password=body.confirm_password,
+    )
+    if not ok:
+        http_status = status.HTTP_400_BAD_REQUEST
+        if "旧密码错误" in err:
+            http_status = status.HTTP_401_UNAUTHORIZED
+        raise HTTPException(status_code=http_status, detail=err)
+    return {"message": "密码修改成功，请重新登录"}

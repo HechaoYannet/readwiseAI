@@ -34,7 +34,7 @@ ReadWise AI 是一个基于 FastAPI 构建的智能英语学习系统，采用�
 - **语料生成**：按难度（L1–L4）和体裁（议论文/说明文/记叙文）生成高质量英文文章。
 - **题目生成**：根据文章生成高考风格选择题及解析。
 - **智能问答**：支持单词查询、句子解析、语法讲解和翻译，通过 LangChain 工具自主访问记忆。
-- **用户管理**：基于邀请码的注册系统，JWT 身份认证，用户信息管理。
+- **用户管理**：基于邀请码的注册系统，JWT 身份认证，用户名+密码登录，密码修改，用户信息管理。
 - **记忆管理**：按用户隔离的工作记忆（会话级）和长期记忆（错题本、遗忘曲线）。
 
 ---
@@ -49,16 +49,17 @@ readwiseAI/
 │   │   ├── __init__.py
 │   │   ├── jwt_handler.py         # JWT 生成/验证（PyJWT，7天有效期）
 │   │   ├── dependencies.py        # FastAPI 依赖注入（get_current_user）
-│   │   └── models.py              # 认证请求/响应 Pydantic 模型
+│   │   ├── models.py              # 认证请求/响应 Pydantic 模型
+│   │   └── password.py            # bcrypt 密码哈希与验证
 │   ├── api/routes/
-│   │   ├── auth.py                # POST /api/auth/*（注册/登出/刷新）
+│   │   ├── auth.py                # POST /api/auth/*（注册/登录/登出/刷新）
 │   │   ├── users.py               # GET/PUT /api/users/*（用户信息）
 │   │   ├── attempts.py            # POST /api/attempt
 │   │   ├── results.py             # GET  /api/result/{request_id}
 │   │   └── callback.py            # POST /internal/callback/{request_id}
 │   ├── models/
 │   │   ├── state.py               # Orchestrator 状态定义
-│   │   ├── user.py                # User 数据模型 + UserStore（JSON文件存储）
+│   │   ├── user.py                # User 数据模型 + UserStore（JSON文件存储）含 password_hash 字段
 │   │   ├── invite.py              # InviteCode 数据模型 + InviteStore
 │   │   ├── working_memory.py      # 会话级工作记忆（按 user_id/session_id 隔离）
 │   │   ├── long_term_memory.py    # 用户长期记忆（错题、遗忘曲线、战力值）
@@ -72,7 +73,7 @@ readwiseAI/
 │   │   └── checkpoint.py          # 状态持久化
 │   ├── services/
 │   │   ├── llm_service.py         # LLM 调用封装
-│   │   └── user_service.py        # 用户服务层（注册、CRUD、邀请码管理）
+│   │   └── user_service.py        # 用户服务层（注册、登录、密码修改、CRUD、邀请码管理）
 │   ├── sub_agents/
 │   │   ├── base.py                # BaseSubAgent 抽象类（含 load_prompt()）
 │   │   ├── diagnosis.py           # 错误诊断 Agent
@@ -144,12 +145,37 @@ readwiseAI/
 {
     "invite_code": "ABC12345",
     "username": "张三",
+    "password": "password123",
+    "confirm_password": "password123",
     "exam_region": "全国I卷",
     "grade": "高三",
     "school": "示范高中"
 }
 
 // 响应 (201)
+{
+    "user_id": "uuid-xxxx",
+    "username": "张三",
+    "access_token": "eyJ...",
+    "token_type": "bearer"
+}
+```
+
+**密码规则：** 8–20 位，两次输入须一致。
+
+#### POST /api/auth/login — 登录
+
+**认证：** 无  
+**说明：** 使用用户名（或手机号/邮箱）与密码登录，返回 JWT Token。
+
+```json
+// 请求
+{
+    "login_id": "张三",
+    "password": "password123"
+}
+
+// 响应 (200)
 {
     "user_id": "uuid-xxxx",
     "username": "张三",
@@ -196,6 +222,22 @@ readwiseAI/
 #### PUT /api/users/me — 更新用户信息
 
 可修改字段：`username`、`exam_region`、`grade`、`school`
+
+#### PUT /api/users/password — 修改密码
+
+**认证：** ✅ Bearer Token
+
+```json
+// 请求
+{
+    "old_password": "oldPass12",
+    "new_password": "newPass12",
+    "confirm_password": "newPass12"
+}
+
+// 响应
+{ "message": "密码修改成功，请重新登录" }
+```
 
 #### GET /api/users/stats — 获取用户统计
 
