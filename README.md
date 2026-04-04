@@ -15,6 +15,7 @@ ReadWise AI 是一个基于 FastAPI 构建的智能英语学习系统，采用�
   - [GET /api/result/{request_id} — 查询结果](#get-apiresultrequest_id--查询结果)
   - [POST /internal/callback/{request_id} — 内部回调](#post-internalcallbackrequest_id--内部回调)
 - [记忆管理模块](#记忆管理模块)
+- [语料专家升级说明](#语料专家升级说明)
 - [管理员命令行工具](#管理员命令行工具)
 - [外部 API 调用分析](#外部-api-调用分析)
   - [LLM API（OpenAI / DeepSeek）](#llm-apiopenai--deepseek)
@@ -31,11 +32,12 @@ ReadWise AI 是一个基于 FastAPI 构建的智能英语学习系统，采用�
 **ReadWise AI** 的核心功能：
 
 - **错误诊断**：分析学生英语阅读理解的错误，生成相似练习题。
-- **语料生成**：按难度（L1–L4）和体裁（议论文/说明文/记叙文）生成高质量英文文章。
+- **语料生成**：按难度（L1–L4）和体裁（议论文/说明文/记叙文）生成高质量英文文章；支持以真题为风格参考的风格化生成。
+- **完整题组生成（方案一）**：主控 LLM 通过 LangChain 工具调用语料专家和出题专家，动态注入子任务，灵活生成包含 4 篇文章+配套题目的完整训练题组。
 - **题目生成**：根据文章生成高考风格选择题及解析。
 - **智能问答**：支持单词查询、句子解析、语法讲解和翻译，通过 LangChain 工具自主访问记忆。
 - **用户管理**：基于邀请码的注册系统，JWT 身份认证，用户名+密码登录，密码修改，用户信息管理。
-- **记忆管理**：按用户隔离的工作记忆（会话级）和长期记忆（错题本、遗忘曲线）。
+- **记忆管理**：按用户隔离的工作记忆（会话级）和长期记忆（错题本、遗忘曲线）；语料专家生成文章后自动同步到工作记忆。
 
 ---
 
@@ -66,10 +68,10 @@ readwiseAI/
 │   │   ├── mistakes.py            # 错题本（MistakeEntry + MistakeBook）
 │   │   └── forgetting.py         # SM-2 遗忘曲线算法
 │   ├── orchestrator/
-│   │   ├── agent.py               # Orchestrator 主控循环
-│   │   ├── planner.py             # 任务分解（Planner）
+│   │   ├── agent.py               # Orchestrator 主控循环（含动态子任务注入）
+│   │   ├── planner.py             # 任务分解（Planner，支持 training_set 总体规划）
 │   │   ├── verifier.py            # 结果验证（Verifier）
-│   │   ├── dispatcher.py          # 任务分发（注入工作记忆+长期记忆+语料库）
+│   │   ├── dispatcher.py          # 任务分发（注入工作记忆+长期记忆+语料库；跨任务输入解析）
 │   │   └── checkpoint.py          # 状态持久化（按用户隔离到 data/users/{user_id}/）
 │   ├── services/
 │   │   ├── llm_service.py         # LLM 调用封装
@@ -77,7 +79,7 @@ readwiseAI/
 │   ├── sub_agents/
 │   │   ├── base.py                # BaseSubAgent 抽象类（含 load_prompt()）
 │   │   ├── diagnosis.py           # 错误诊断 Agent
-│   │   ├── corpus.py              # 语料生成 Agent
+│   │   ├── corpus.py              # 语料生成 Agent（普通/总体规划/风格化；工作记忆同步）
 │   │   ├── question.py            # 题目生成 Agent（支持连续出题）
 │   │   └── qa.py                  # 问答 Agent（LangChain 工具调用）
 │   └── tools/
@@ -270,7 +272,7 @@ readwiseAI/
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `request_type` | string | ✅ | `attempt` / `corpus` / `question` / `qa` |
+| `request_type` | string | ✅ | `attempt` / `corpus` / `question` / `qa` / `training_set` |
 | `paragraph` | string | attempt | 阅读文段 |
 | `question_text` | string | attempt | 题目内容 |
 | `options` | object | attempt | 选项 `{"A": ..., "B": ..., "C": ..., "D": ...}` |
@@ -288,6 +290,8 @@ readwiseAI/
 | `content` | string | qa | 查询内容 |
 | `context_sentence` | string | qa（word） | 单词所在句子上下文 |
 | `session_id` | string | 否 | 会话 ID（用于工作记忆） |
+| `reference_id` | string | corpus | 参考真题的语料库 ID（风格化生成） |
+| `user_level` | string | training_set | 用户整体水平提示（L1–L4），用于总体规划 |
 
 > **注意**：`user_id` 不再作为请求体字段传入，而是从 JWT Token 中自动提取。
 
@@ -329,6 +333,79 @@ readwiseAI/
 ### POST /internal/callback/{request_id} — 内部回调
 
 供 Sub-Agent 在异步完成任务后通知 Orchestrator，**仅供内部使用**。
+
+---
+
+## 语料专家升级说明
+
+### 三种工作模式
+
+#### 1. 普通生成模式（默认）
+
+`request_type: "corpus"` — 按指定难度、体裁、主题生成单篇文章。
+
+```json
+{
+  "request_type": "corpus",
+  "difficulty": "L3",
+  "genre": "argumentative",
+  "topic": "人工智能对教育的影响",
+  "word_count": 320
+}
+```
+
+#### 2. 风格化生成模式（方案一）
+
+传入 `reference_id` 指定语料库中的真题 ID，语料专家将以该真题为风格参考，生成同体裁、相似句式难度的新文章。
+
+```json
+{
+  "request_type": "corpus",
+  "difficulty": "L3",
+  "genre": "argumentative",
+  "topic": "renewable energy",
+  "word_count": 350,
+  "reference_id": "gk_2024_001"
+}
+```
+
+#### 3. 总体规划模式（方案一 · 完整题组）
+
+`request_type: "training_set"` — 主控 LLM 首次调用语料专家时开启规划，语料专家将：
+
+1. 读取整个（或部分）真题语料库索引
+2. 综合用户错题本、战力值历史等辅助信息
+3. 规划本组训练 4 篇文章各自的出题描述（主题、真题参考 ID、参考语法点、难度、字数等）
+4. 返回 `training_plan` 给主控 LLM，并动态注入 4 组（语料+出题）子任务
+
+主控 LLM 通过 LangChain 工具依次调用语料专家和出题专家，形成完整题组。
+
+```json
+{
+  "request_type": "training_set",
+  "user_level": "L2"
+}
+```
+
+**返回结构**（轮询 `/api/result/{request_id}`）：
+
+```json
+{
+  "status": "completed",
+  "results": {
+    "sub_000": { "training_plan": [...], "new_sub_tasks": [...] },
+    "dyn_c1": { "article": { "title": "...", "content": "..." } },
+    "dyn_q1": { "questions": [...] },
+    ...
+  }
+}
+```
+
+### 工作记忆管理
+
+语料专家在每次成功生成文章后，自动将文章保存到当前会话的 **WorkingMemory** (`current_article`)，供出题专家、问答专家在同一会话内直接调用，无需重复传递文章内容。
+
+问答专家（`qa_expert`）通过 `get_current_article` LangChain 工具即可读取当前文章，实现跨子任务的记忆共享。
 
 ---
 
@@ -471,11 +548,14 @@ POST /api/attempt
   [后台任务] Orchestrator._run()  ← 最多 20 次迭代
        │
        ├── PENDING → PLANNING：Planner 分解任务为子任务列表
+       │     ├── attempt / corpus / question / qa → 规则化快速规划
+       │     └── training_set → 生成总体规划子任务（corpus_expert, enable_planning=True）
        │
        ├── WAITING → 执行：Dispatcher 调用 Sub-Agent
        │              ├── 注入工作记忆 + 长期记忆 + 语料库
+       │              ├── 解析跨任务输入引用（article_task_id → article content）
        │              ├── Verifier 验证结果
-       │              ├── 通过：标记子任务完成
+       │              ├── 通过：标记子任务完成 → 注入 new_sub_tasks（动态子任务注入）
        │              └── 失败：标记为 RETRY
        │
        ├── RETRY → 重规划：调整输入参数，重新执行（最多重试 2 次）
@@ -486,7 +566,20 @@ POST /api/attempt
        GET /api/result/{request_id}  ← 客户端轮询
 ```
 
-**请求状态枚举：** `PENDING` → `PLANNING` → `WAITING` → `RETRY` → `COMPLETED` / `FAILED`
+**training_set 完整流程：**
+```
+corpus_expert (enable_planning=True)
+       │  读取语料库 + 用户错题/战力值
+       │  LLM 生成 4 篇文章规划
+       ▼
+  返回 training_plan + new_sub_tasks
+       │  Orchestrator 注入 4 × (corpus_expert + question_expert)
+       ▼
+  dyn_c1 → dyn_q1（文章1 + 题目1）
+  dyn_c2 → dyn_q2（文章2 + 题目2）
+  dyn_c3 → dyn_q3（文章3 + 题目3）
+  dyn_c4 → dyn_q4（文章4 + 题目4）
+```
 
 ---
 
@@ -495,8 +588,8 @@ POST /api/attempt
 | Agent | 模块 | 功能 |
 |-------|------|------|
 | `diagnosis_expert` | `sub_agents/diagnosis.py` | 错误分析、相似题生成 |
-| `corpus_expert` | `sub_agents/corpus.py` | 英文文章生成（L1–L4 难度，3 种体裁） |
-| `question_expert` | `sub_agents/question.py` | 阅读理解题目生成（支持连续出多题） |
+| `corpus_expert` | `sub_agents/corpus.py` | 英文文章生成（L1–L4 难度，3 种体裁）；**总体规划**（读取语料库+学情，生成4文章训练方案，动态注入子任务）；**风格化生成**（以真题为风格参考） |
+| `question_expert` | `sub_agents/question.py` | 阅读理解题目生成（支持连续出多题；支持通过 `article_task_id` 从前序任务读取文章） |
 | `qa_expert` | `sub_agents/qa.py` | 单词查询（有道）、句子解析、语法讲解、翻译、LangChain 工具调用 |
 
 所有 Sub-Agent 继承自 `BaseSubAgent`，通过 `load_prompt(name)` 加载提示词文件，通过 `_call_llm(prompt)` 调用 LLM。

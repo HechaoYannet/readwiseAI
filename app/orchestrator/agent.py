@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-from app.models.state import OrchestratorState, RequestStatus, SubTaskStatus
+from app.models.state import OrchestratorState, RequestStatus, SubTask, SubTaskStatus
 from app.orchestrator.checkpoint import get_checkpoint_manager
 from app.orchestrator.dispatcher import Dispatcher
 from app.orchestrator.planner import Planner
@@ -71,8 +71,11 @@ class Orchestrator:
                             state.status = RequestStatus.FAILED
                     elif unverified.status == SubTaskStatus.RETRY:
                         state.status = RequestStatus.RETRY
-                    elif self._all_tasks_done(state):
-                        state.status = RequestStatus.COMPLETED
+                    else:
+                        # Inject any new sub-tasks emitted by this task
+                        state = self._inject_new_tasks(state, unverified)
+                        if self._all_tasks_done(state):
+                            state.status = RequestStatus.COMPLETED
                 else:
                     # All tasks either completed or failed
                     if self._all_tasks_done(state):
@@ -98,6 +101,46 @@ class Orchestrator:
                 break
 
         self._finalize(state)
+
+    # ------------------------------------------------------------------
+    # Dynamic task injection (Plan A – LangChain-style flexibility)
+    # ------------------------------------------------------------------
+
+    def _inject_new_tasks(
+        self, state: OrchestratorState, completed_task: SubTask
+    ) -> OrchestratorState:
+        """Inject sub-tasks emitted by a completed task into the state.
+
+        When a corpus_expert planning task returns ``new_sub_tasks`` in its
+        result, those tasks are appended to ``state.sub_tasks`` so the
+        Dispatcher will pick them up on the next iteration.  This implements
+        the Plan A "high-flexibility main LLM" behaviour without requiring an
+        upfront full plan.
+        """
+        new_tasks_data: List[Dict[str, Any]] = completed_task.result.get(
+            "new_sub_tasks", []
+        )
+        if not new_tasks_data:
+            return state
+
+        existing_ids = {t.sub_task_id for t in state.sub_tasks}
+        injected = 0
+        for task_data in new_tasks_data:
+            tid = task_data.get("sub_task_id", "")
+            if not tid or tid in existing_ids:
+                continue
+            try:
+                state.sub_tasks.append(SubTask(**task_data))
+                existing_ids.add(tid)
+                injected += 1
+            except Exception as exc:
+                logger.warning("Could not inject task %s: %s", tid, exc)
+
+        if injected:
+            logger.info(
+                "Injected %d new sub-tasks from %s", injected, completed_task.sub_task_id
+            )
+        return state
 
     # ------------------------------------------------------------------
     def _all_tasks_done(self, state: OrchestratorState) -> bool:

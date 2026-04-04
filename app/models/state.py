@@ -64,8 +64,8 @@ class AttemptRequest(BaseModel):
     correct_answer: str = ""
     time_spent: int = 0
     # Optional overrides for corpus / question / qa requests
-    request_type: str = "attempt"  # attempt | corpus | question | qa
-    query_type: Optional[str] = None  # for qa: word/sentence/grammar/translate
+    request_type: str = "attempt"  # attempt | corpus | question | qa | training_set
+    query_type: Optional[str] = None  # for qa: word/sentence/grammar/translate/free
     content: Optional[str] = None    # for qa queries
     context_sentence: Optional[str] = None
     difficulty: Optional[str] = None  # L1/L2/L3/L4
@@ -77,3 +77,7 @@ class AttemptRequest(BaseModel):
     question_types: Optional[List[str]] = None  # list of question types for multi-question
     count: Optional[int] = None
     session_id: Optional[str] = None  # session identifier for working memory
+    # Corpus expert extended options
+    enable_planning: Optional[bool] = None   # training_set: trigger corpus planning mode
+    reference_id: Optional[str] = None       # corpus article ID for stylized generation
+    user_level: Optional[str] = None         # overall user level hint for planning
