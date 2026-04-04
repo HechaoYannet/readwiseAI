@@ -1,14 +1,25 @@
 """JWT生成与验证."""
 from __future__ import annotations
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import jwt
 
-_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "readwise-dev-secret-change-in-production")
+logger = logging.getLogger(__name__)
+
+_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+_DEFAULT_SECRET = "readwise-dev-secret-change-in-production"
 _ALGORITHM = "HS256"
 _ACCESS_TOKEN_EXPIRE_DAYS = 7
 _REFRESH_THRESHOLD_DAYS = 3  # refresh if less than 3 days remaining
+
+if not _SECRET_KEY:
+    logger.warning(
+        "JWT_SECRET_KEY is not set. Using the default dev secret – "
+        "set JWT_SECRET_KEY in production to a strong random value."
+    )
+    _SECRET_KEY = _DEFAULT_SECRET
 
 
 def create_access_token(user_id: str, role: str = "user") -> str:

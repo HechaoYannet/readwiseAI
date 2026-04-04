@@ -28,7 +28,7 @@ class InviteCode(BaseModel):
     used_count: int = 0
     used_by: List[str] = Field(default_factory=list)
     expires_at: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     note: str = ""
     revoked: bool = False
 

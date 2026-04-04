@@ -70,7 +70,12 @@ def register_user(
         from app.models.long_term_memory import LongTermMemory
         LongTermMemory(user_id=user.id)
     except Exception as exc:
-        logger.warning("Could not init long-term memory for %s: %s", user.id, exc)
+        logger.warning(
+            "Failed to initialize long-term memory directory for user %s: %s. "
+            "User registration completed but memory features may not work.",
+            user.id,
+            exc,
+        )
 
     return user, ""
 

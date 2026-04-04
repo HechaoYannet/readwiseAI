@@ -34,7 +34,7 @@ async def update_me(
     token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Update current user's profile."""
-    updates = {k: v for k, v in body.model_dump().items() if v}
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
     updated = user_service.update_user(token_data.user_id, **updates)
     if updated is None:
         raise HTTPException(

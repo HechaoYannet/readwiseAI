@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,8 +34,8 @@ class User(BaseModel):
     school: str = ""
     role: UserRole = UserRole.USER
     status: UserStatus = UserStatus.ACTIVE
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-    last_login_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_login_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     last_login_ip: str = ""
 
 
