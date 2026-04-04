@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -18,6 +19,26 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 _LONG_TERM_DIR = Path(__file__).parent.parent.parent / "data" / "long_term"
+
+# Only allow alphanumeric characters, hyphens, and underscores in user IDs
+# to prevent path traversal attacks.
+_USER_ID_PATTERN = re.compile(r"^[\w\-]+$")
+
+
+def _safe_user_dir(base_dir: Path, user_id: str) -> Path:
+    """Return a path for user_id inside base_dir, with traversal checks.
+
+    Raises ValueError if user_id is invalid or resolves outside base_dir.
+    """
+    if not _USER_ID_PATTERN.match(user_id):
+        raise ValueError(f"Invalid user_id: {user_id!r}")
+    resolved_base = base_dir.resolve()
+    user_dir = (base_dir / user_id).resolve()
+    if not str(user_dir).startswith(str(resolved_base) + "/") and user_dir != resolved_base:
+        raise ValueError(f"Path traversal detected for user_id: {user_id!r}")
+    return user_dir
+
+
 
 # Quality values expected by SM-2 (0-5)
 # 5: perfect recall, 4: correct with hesitation, 3: correct with difficulty,
@@ -81,8 +102,9 @@ class ForgettingCurve:
     """Manages SM-2 scheduling for a user's mistake entries."""
 
     def __init__(self, user_id: str) -> None:
+        user_dir = _safe_user_dir(_LONG_TERM_DIR, user_id)
         self.user_id = user_id
-        self._path = _LONG_TERM_DIR / user_id / "forgetting.json"
+        self._path = user_dir / "forgetting.json"
         self._items: Dict[str, SM2Item] = self._load()
 
     # ------------------------------------------------------------------

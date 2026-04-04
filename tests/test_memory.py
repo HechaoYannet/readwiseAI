@@ -48,7 +48,7 @@ class TestWorkingMemory:
             from app.models.working_memory import WorkingMemory
             wm = WorkingMemory(session_id="sess_001", user_id="u1")
             wm.save()
-            path = tmp_path / "sessions" / "sess_001.json"
+            path = tmp_path / "sessions" / "u1" / "sess_001.json"
             assert path.exists()
         finally:
             wm_module._SESSIONS_DIR = original
@@ -63,7 +63,7 @@ class TestWorkingMemory:
             wm = WorkingMemory(session_id="sess_002", user_id="u2")
             wm.save()
 
-            loaded = WorkingMemory.load("sess_002")
+            loaded = WorkingMemory.load("sess_002", "u2")
             assert loaded is not None
             assert loaded.user_id == "u2"
         finally:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,26 @@ from app.models.mistakes import MistakeBook, MistakeEntry
 logger = logging.getLogger(__name__)
 
 _LONG_TERM_DIR = Path(__file__).parent.parent.parent / "data" / "long_term"
+
+# Only allow alphanumeric characters, hyphens, and underscores in user IDs
+# to prevent path traversal attacks.
+_USER_ID_PATTERN = re.compile(r"^[\w\-]+$")
+
+
+def _safe_user_dir(base_dir: Path, user_id: str) -> Path:
+    """Return a path for user_id inside base_dir, with traversal checks.
+
+    Raises ValueError if user_id is invalid or resolves outside base_dir.
+    """
+    if not _USER_ID_PATTERN.match(user_id):
+        raise ValueError(f"Invalid user_id: {user_id!r}")
+    resolved_base = base_dir.resolve()
+    user_dir = (base_dir / user_id).resolve()
+    if not str(user_dir).startswith(str(resolved_base) + "/") and user_dir != resolved_base:
+        raise ValueError(f"Path traversal detected for user_id: {user_id!r}")
+    return user_dir
+
+
 
 
 class LongTermMemory:
@@ -28,8 +49,8 @@ class LongTermMemory:
     """
 
     def __init__(self, user_id: str) -> None:
+        self._dir = _safe_user_dir(_LONG_TERM_DIR, user_id)
         self.user_id = user_id
-        self._dir = _LONG_TERM_DIR / user_id
         self._dir.mkdir(parents=True, exist_ok=True)
 
         self.mistake_book = MistakeBook(user_id)

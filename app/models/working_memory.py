@@ -1,12 +1,13 @@
 """WorkingMemory – 会话级工作记忆管理.
 
 存储当前会话的上下文信息，包括当前文章、当前题目和对话历史。
-数据持久化到 data/working/sessions/{session_id}.json。
+数据持久化到 data/working/sessions/{user_id}/{session_id}.json。
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,6 +20,24 @@ _SESSIONS_DIR = Path(__file__).parent.parent.parent / "data" / "working" / "sess
 
 # Maximum conversation messages to retain (20 turns × 2 messages per turn)
 _MAX_CONVERSATION_MESSAGES = 40
+
+# Only allow alphanumeric characters, hyphens, and underscores in user IDs
+# to prevent path traversal attacks.
+_USER_ID_PATTERN = re.compile(r"^[\w\-]+$")
+
+
+def _safe_user_dir(base_dir: Path, user_id: str) -> Path:
+    """Return a path for user_id inside base_dir, with traversal checks.
+
+    Raises ValueError if user_id is invalid or resolves outside base_dir.
+    """
+    if not _USER_ID_PATTERN.match(user_id):
+        raise ValueError(f"Invalid user_id: {user_id!r}")
+    resolved_base = base_dir.resolve()
+    user_dir = (base_dir / user_id).resolve()
+    if not str(user_dir).startswith(str(resolved_base) + "/") and user_dir != resolved_base:
+        raise ValueError(f"Path traversal detected for user_id: {user_id!r}")
+    return user_dir
 
 
 class WorkingMemory(BaseModel):
@@ -48,15 +67,17 @@ class WorkingMemory(BaseModel):
 
     def save(self) -> None:
         """Persist this working memory to disk."""
-        _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        user_dir = _safe_user_dir(_SESSIONS_DIR, self.user_id)
+        user_dir.mkdir(parents=True, exist_ok=True)
         self.updated_at = datetime.now().isoformat()
-        path = _SESSIONS_DIR / f"{self.session_id}.json"
+        path = user_dir / f"{self.session_id}.json"
         path.write_text(self.model_dump_json(indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, session_id: str) -> Optional["WorkingMemory"]:
+    def load(cls, session_id: str, user_id: str = "default") -> Optional["WorkingMemory"]:
         """Load working memory from disk.  Returns None if not found."""
-        path = _SESSIONS_DIR / f"{session_id}.json"
+        user_dir = _safe_user_dir(_SESSIONS_DIR, user_id)
+        path = user_dir / f"{session_id}.json"
         if not path.exists():
             return None
         try:
@@ -69,7 +90,7 @@ class WorkingMemory(BaseModel):
     @classmethod
     def get_or_create(cls, session_id: str, user_id: str) -> "WorkingMemory":
         """Load existing session or create a new one."""
-        existing = cls.load(session_id)
+        existing = cls.load(session_id, user_id)
         if existing is not None:
             return existing
         wm = cls(session_id=session_id, user_id=user_id)
