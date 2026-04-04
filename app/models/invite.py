@@ -38,8 +38,13 @@ class InviteCode(BaseModel):
             return False
         if self.used_count >= self.max_uses:
             return False
-        if self.expires_at and datetime.now().isoformat() > self.expires_at:
-            return False
+        if self.expires_at:
+            try:
+                from datetime import datetime
+                if datetime.fromisoformat(self.expires_at) < datetime.now():
+                    return False
+            except ValueError:
+                return False
         return True
 
 

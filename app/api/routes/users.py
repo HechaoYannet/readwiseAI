@@ -61,5 +61,5 @@ async def get_stats(token_data: TokenData = Depends(get_current_user)) -> Dict[s
             "latest_power": power_history[-1]["score"] if power_history else None,
             "power_records": len(power_history),
         }
-    except Exception as exc:
-        return {"user_id": user_id, "error": str(exc)}
+    except Exception:
+        return {"user_id": user_id, "error": "Failed to retrieve stats"}
