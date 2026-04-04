@@ -146,6 +146,24 @@ class CorpusRepository:
         content = _read_article(article_id)
         return {"metadata": meta, "content": content or ""}
 
+    def get_all_metadata(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Return metadata for all articles in the corpus index.
+
+        Args:
+            limit: Maximum number of entries to return (safety cap).
+
+        Returns:
+            A list of article metadata dicts (without full content).
+        """
+        index = _load_index()
+        articles = index.get("articles", {})
+        results = []
+        for aid, entry in list(articles.items())[:limit]:
+            meta = entry.get("metadata")
+            if meta:
+                results.append(meta)
+        return results
+
     def format_examples_for_prompt(
         self,
         difficulty: Optional[str] = None,
