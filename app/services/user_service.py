@@ -1,7 +1,7 @@
 """User service layer – business logic for user management."""
 from __future__ import annotations
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.invite import InviteCode, InviteStore
@@ -115,7 +115,7 @@ def list_users(status: Optional[str] = None, limit: int = 100) -> List[User]:
 def update_last_login(user_id: str, client_ip: str = "") -> None:
     _user_store.update(
         user_id,
-        last_login_at=datetime.now().isoformat(),
+        last_login_at=datetime.now(timezone.utc).isoformat(),
         last_login_ip=client_ip,
     )
 

@@ -4,7 +4,7 @@ import json
 import logging
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -40,8 +40,12 @@ class InviteCode(BaseModel):
             return False
         if self.expires_at:
             try:
-                from datetime import datetime
-                if datetime.fromisoformat(self.expires_at) < datetime.now():
+                expires = datetime.fromisoformat(self.expires_at)
+                now = datetime.now(timezone.utc)
+                # Normalize to UTC if naive
+                if expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=timezone.utc)
+                if expires < now:
                     return False
             except ValueError:
                 return False
