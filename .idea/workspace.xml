@@ -5,10 +5,40 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1f0d6803-b5c4-4b12-8372-176217bf1a6e" name="更改" comment="重新组织了文档">
+      <change afterPath="$PROJECT_DIR$/docs/重构.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/routes/auth.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/routes/auth.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/auth/dependencies.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/auth/dependencies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/UserTest.http" beforeDir="false" afterPath="$PROJECT_DIR$/UserTest.http" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/orchestrator/planner.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/orchestrator/planner.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_01f9c11edbf2.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_1da2d8da859c.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_545d6c128c7e.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_645e1ab0df18.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_7f3805dee9cd.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_853ce615678f.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_c0b9d5f7eb4a.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_ca52c002d768.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_cab1ef863d68.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_ec24579e1133.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_fba83bec9318.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_fcf19c1e044c.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_05a2a67307c0.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_35e1d0fff931.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_49974dc8dbbc.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_5fd64c5c4c82.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_768fc9a46144.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_aa570d22de77.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_04d0c7248e26.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_51c8298493bb.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_597acd3d3ed1.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_74eec5b08ea8.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_9ada4fad6641.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_c11c10b19dfb.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_26916f1269bc.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_4e07f2837455.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_5038a58fb2a6.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_957cf4e0b5ea.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_c602bde82257.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_e02e6b8e573c.json" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -120,6 +150,9 @@
     "FastAPI.readwise-backend.executor": "Run",
     "HTTP 请求.UserTest | GET request to example server.executor": "Run",
     "HTTP 请求.UserTest | POST attempt request to  server.executor": "Run",
+    "HTTP 请求.UserTest | POST request to login and obtain auth token.executor": "Run",
+    "HTTP 请求.UserTest | POST request to register a new user.executor": "Run",
+    "HTTP 请求.UserTest | POST request to verify invite code.executor": "Run",
     "HTTP 请求.test_main | #1.executor": "Run",
     "HTTP 请求.test_main | #2.executor": "Run",
     "HTTP 请求.test_main | #3.executor": "Run",
@@ -167,8 +200,10 @@
         <entry key="HttpClient.HttpRequestRunConfigurationType">
           <value>
             <map>
-              <entry key="UserTest | GET request to example server" value="STOPPED" />
               <entry key="UserTest | POST attempt request to  server" value="STOPPED" />
+              <entry key="UserTest | POST request to login and obtain auth token" value="STOPPED" />
+              <entry key="UserTest | POST request to register a new user" value="STOPPED" />
+              <entry key="UserTest | POST request to verify invite code" value="STOPPED" />
             </map>
           </value>
         </entry>
@@ -180,6 +215,15 @@
       <method v="2" />
     </configuration>
     <configuration name="UserTest | POST attempt request to  server" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST attempt request to  server" index="2" runType="运行单个请求">
+      <method v="2" />
+    </configuration>
+    <configuration name="UserTest | POST request to login and obtain auth token" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to login and obtain auth token" index="3" runType="运行单个请求">
+      <method v="2" />
+    </configuration>
+    <configuration name="UserTest | POST request to register a new user" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to register a new user" index="2" runType="运行单个请求">
+      <method v="2" />
+    </configuration>
+    <configuration name="UserTest | POST request to verify invite code" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to verify invite code" runType="运行单个请求">
       <method v="2" />
     </configuration>
     <configuration name="test" type="PythonConfigurationType" factoryName="Python">
@@ -233,6 +277,9 @@
     </configuration>
     <list>
       <item itemvalue="FastAPI.readwise-backend" />
+      <item itemvalue="HTTP 请求.UserTest | POST request to login and obtain auth token" />
+      <item itemvalue="HTTP 请求.UserTest | POST request to register a new user" />
+      <item itemvalue="HTTP 请求.UserTest | POST request to verify invite code" />
       <item itemvalue="HTTP 请求.UserTest | GET request to example server" />
       <item itemvalue="HTTP 请求.UserTest | POST attempt request to  server" />
       <item itemvalue="Python.test" />
@@ -240,6 +287,9 @@
     <recent_temporary>
       <list>
         <item itemvalue="HTTP 请求.UserTest | POST attempt request to  server" />
+        <item itemvalue="HTTP 请求.UserTest | POST request to login and obtain auth token" />
+        <item itemvalue="HTTP 请求.UserTest | POST request to register a new user" />
+        <item itemvalue="HTTP 请求.UserTest | POST request to verify invite code" />
         <item itemvalue="HTTP 请求.UserTest | GET request to example server" />
       </list>
     </recent_temporary>
@@ -332,7 +382,7 @@
     <option name="LAST_COMMIT_MESSAGE" value="重新组织了文档" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/readwise_backend$readwise_backend.coverage" NAME="readwise-backend 覆盖结果" MODIFIED="1775299939732" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/readwise_backend$readwise_backend.coverage" NAME="readwise-backend 覆盖结果" MODIFIED="1775327369383" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/readwise_backend$.coverage" NAME=" 覆盖结果" MODIFIED="1775298878275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/readwise_backend$test.coverage" NAME="test 覆盖结果" MODIFIED="1775300126328" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/readwise_backend$Admin_CLI.coverage" NAME="Admin CLI 覆盖结果" MODIFIED="1775292795255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />

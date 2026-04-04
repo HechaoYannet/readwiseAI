@@ -1,6 +1,8 @@
 """Planner – uses an LLM to decompose a user request into a list of sub-tasks."""
 from __future__ import annotations
 
+import json
+from string import Template
 import logging
 from typing import Any, Dict, List
 
@@ -182,16 +184,16 @@ class Planner:
         """Generate a task plan and store sub_tasks in state."""
         user_request = state.original_request
 
-        # Try fast rule-based plan first
-        plan = _make_rule_based_plan(user_request)
+        # Try llm first
+        prompt = Template(PLANNING_PROMPT).substitute(
+            user_request=json.dumps(user_request),
+            context="",
+        )
+        plan = await llm_json_call(prompt)
 
         if not plan:
-            # Fall back to LLM
-            prompt = PLANNING_PROMPT.format(
-                user_request=str(user_request),
-                context="",
-            )
-            plan = await llm_json_call(prompt)
+            # Fall back to rule
+            plan = _make_rule_based_plan(user_request)
 
         if not plan or "sub_tasks" not in plan:
             logger.error("Planner returned empty plan for %s", state.request_id)
@@ -206,7 +208,7 @@ class Planner:
         return state
 
     async def replan(
-        self, state: OrchestratorState, failed_task: "SubTask"  # noqa: F821
+            self, state: OrchestratorState, failed_task: "SubTask"  # noqa: F821
     ) -> OrchestratorState:
         """Adjust input for a failed task and mark it for retry."""
         feedback = state.error_log[-1] if state.error_log else "unknown error"
