@@ -70,7 +70,7 @@ readwiseAI/
 │   │   ├── planner.py             # 任务分解（Planner）
 │   │   ├── verifier.py            # 结果验证（Verifier）
 │   │   ├── dispatcher.py          # 任务分发（注入工作记忆+长期记忆+语料库）
-│   │   └── checkpoint.py          # 状态持久化
+│   │   └── checkpoint.py          # 状态持久化（按用户隔离到 data/users/{user_id}/）
 │   ├── services/
 │   │   ├── llm_service.py         # LLM 调用封装
 │   │   └── user_service.py        # 用户服务层（注册、登录、密码修改、CRUD、邀请码管理）
@@ -107,9 +107,13 @@ readwiseAI/
 │   ├── corpus/                    # 语料库（文章 + index.json）
 │   ├── working/sessions/{user_id}/# 工作记忆（按用户隔离）
 │   ├── long_term/{user_id}/       # 长期记忆（按用户隔离）
-│   ├── users/users.json           # 用户数据
+│   ├── users/                     # 用户数据（users.json + 按用户隔离的存档）
+│   │   ├── users.json
+│   │   └── {user_id}/
+│   │       ├── checkpoints/       # 请求状态存档（按用户隔离）
+│   │       └── results/           # 请求结果存档（按用户隔离）
+│   ├── request_index/             # request_id → user_id 映射（权限校验用）
 │   ├── invites/invites.json       # 邀请码数据
-│   └── results/                   # 最终结果存档
 ├── requirements.txt
 ├── pytest.ini
 ├── UserDesign.md                  # 用户与记忆管理模块构建任务书
@@ -259,14 +263,13 @@ readwiseAI/
 
 **请求方式：** `POST`  
 **路径：** `/api/attempt`  
-**认证：** 无（内测期间）  
+**认证：** ✅ Bearer Token（JWT）  
 **处理方式：** 异步（后台任务）
 
 #### 请求体（JSON）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `user_id` | string | ✅ | 用户 ID |
 | `request_type` | string | ✅ | `attempt` / `corpus` / `question` / `qa` |
 | `paragraph` | string | attempt | 阅读文段 |
 | `question_text` | string | attempt | 题目内容 |
@@ -286,6 +289,8 @@ readwiseAI/
 | `context_sentence` | string | qa（word） | 单词所在句子上下文 |
 | `session_id` | string | 否 | 会话 ID（用于工作记忆） |
 
+> **注意**：`user_id` 不再作为请求体字段传入，而是从 JWT Token 中自动提取。
+
 #### 响应示例
 
 ```json
@@ -304,7 +309,9 @@ readwiseAI/
 
 **请求方式：** `GET`  
 **路径：** `/api/result/{request_id}`  
-**认证：** 无
+**认证：** ✅ Bearer Token（JWT）  
+
+> **权限校验**：只有提交该请求的用户才能查询结果。其他用户返回 `403 Forbidden`；不存在的 `request_id` 返回 `{"status": "not_found"}`（不暴露是否存在）。
 
 **完成响应：**
 ```json
@@ -346,7 +353,12 @@ data/
 │   ├── forgetting.json               # SM-2 遗忘曲线状态
 │   ├── power_history.json            # 战力值历史
 │   └── training.json                 # 训练记录
-├── users/users.json                  # 用户数据
+├── users/                            # 用户数据
+│   ├── users.json                    # 用户注册记录
+│   └── {user_id}/                    # 按用户隔离的请求存档
+│       ├── checkpoints/              # 进行中的请求状态
+│       └── results/                  # 已完成的请求结果
+├── request_index/                    # request_id → user_id 映射
 └── invites/invites.json              # 邀请码数据
 ```
 

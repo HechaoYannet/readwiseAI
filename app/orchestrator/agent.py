@@ -112,7 +112,7 @@ class Orchestrator:
 
     def _finalize(self, state: OrchestratorState) -> None:
         result = self._assemble_result(state)
-        self.checkpoint.save_result(state.request_id, result)
+        self.checkpoint.save_result(state.request_id, state.user_id, result)
         self.checkpoint.delete(state.request_id)
         logger.info(
             "Request %s finalized with status %s", state.request_id, state.status
