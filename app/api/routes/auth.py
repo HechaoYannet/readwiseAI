@@ -58,9 +58,9 @@ async def login(body: LoginRequest) -> LoginResponse:
     """Login with username / phone / email and password."""
     user, error = user_service.login_user(body.login_id, body.password)
     if user is None:
-        return JSONResponse(
+        raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            content={"detail": error},
+            detail=error,
         )
     token = create_access_token(user_id=user.id, role=user.role.value)
     return LoginResponse(

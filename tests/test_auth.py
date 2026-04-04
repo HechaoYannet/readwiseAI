@@ -311,7 +311,7 @@ class TestChangePassword:
         from app.services.user_service import create_invite, register_user, change_password, login_user
         invite = create_invite(max_uses=1)
         user, _ = register_user(invite.code, "改密用户", "全国I卷", "oldPass12", "oldPass12")
-        ok, err = change_password(user.id, "oldPass12", "newPass12", "newPass12")
+        ok, err, _ = change_password(user.id, "oldPass12", "newPass12", "newPass12")
         assert ok, err
         # New password works
         logged, _ = login_user("改密用户", "newPass12")
@@ -325,7 +325,7 @@ class TestChangePassword:
         from app.services.user_service import create_invite, register_user, change_password
         invite = create_invite(max_uses=1)
         user, _ = register_user(invite.code, "改密2", "全国I卷", "oldPass12", "oldPass12")
-        ok, err = change_password(user.id, "wrongOld12", "newPass12", "newPass12")
+        ok, err, _ = change_password(user.id, "wrongOld12", "newPass12", "newPass12")
         assert not ok
         assert "旧密码" in err
 
@@ -334,6 +334,6 @@ class TestChangePassword:
         from app.services.user_service import create_invite, register_user, change_password
         invite = create_invite(max_uses=1)
         user, _ = register_user(invite.code, "改密3", "全国I卷", "oldPass12", "oldPass12")
-        ok, err = change_password(user.id, "oldPass12", "newPass12", "newPass99")
+        ok, err, _ = change_password(user.id, "oldPass12", "newPass12", "newPass99")
         assert not ok
         assert "不一致" in err

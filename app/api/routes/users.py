@@ -71,15 +71,17 @@ async def change_password(
     token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Change the current user's password."""
-    ok, err = user_service.change_password(
+    ok, err, err_code = user_service.change_password(
         user_id=token_data.user_id,
         old_password=body.old_password,
         new_password=body.new_password,
         confirm_password=body.confirm_password,
     )
     if not ok:
-        http_status = status.HTTP_400_BAD_REQUEST
-        if "旧密码错误" in err:
-            http_status = status.HTTP_401_UNAUTHORIZED
+        http_status = (
+            status.HTTP_401_UNAUTHORIZED
+            if err_code == "OLD_PASSWORD_INCORRECT"
+            else status.HTTP_400_BAD_REQUEST
+        )
         raise HTTPException(status_code=http_status, detail=err)
     return {"message": "密码修改成功，请重新登录"}

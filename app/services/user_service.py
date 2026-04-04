@@ -133,27 +133,27 @@ def login_user(login_id: str, password: str) -> Tuple[Optional[User], str]:
 
 def change_password(
     user_id: str, old_password: str, new_password: str, confirm_password: str
-) -> Tuple[bool, str]:
+) -> Tuple[bool, str, str]:
     """Change a user's password after verifying the old one.
 
     Returns:
-        (success, error_message)
+        (success, error_message, error_code)  error_code is "" on success.
     """
     user = _user_store.get_by_id(user_id)
     if user is None:
-        return False, "用户不存在"
+        return False, "用户不存在", "USER_NOT_FOUND"
 
     from app.auth.password import hash_password, verify_password
     if not verify_password(old_password, user.password_hash):
-        return False, "旧密码错误"
+        return False, "旧密码错误", "OLD_PASSWORD_INCORRECT"
 
     ok, err = _validate_password(new_password, confirm_password)
     if not ok:
-        return False, err
+        return False, err, "INVALID_PASSWORD"
 
     new_hash = hash_password(new_password)
     _user_store.update(user_id, password_hash=new_hash)
-    return True, ""
+    return True, "", ""
 
 
 def get_user(user_id: str) -> Optional[User]:
