@@ -62,9 +62,9 @@ class QuestionExpert(BaseSubAgent):
             if input.get("question_type")
             else _DEFAULT_QUESTION_TYPES[:count],
         )
-        # Ensure we have exactly `count` entries (cycle if needed)
-        while len(question_types) < count:
-            question_types = (question_types * 2)[:count]
+        # Ensure we have exactly `count` entries (cycle using modulo)
+        if len(question_types) < count:
+            question_types = [question_types[i % len(question_types)] for i in range(count)]
         question_types = question_types[:count]
 
         # Fetch corpus examples for style reference

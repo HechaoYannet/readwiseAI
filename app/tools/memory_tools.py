@@ -163,34 +163,27 @@ def lookup_word(word: str, context_sentence: str = "") -> str:
         word: 要查询的英语单词。
         context_sentence: 包含该单词的句子（可选，提供后给出语境释义）。
     """
-    import asyncio
-
-    async def _lookup() -> str:
-        try:
-            from app.tools.dictionary import lookup_word as _dict_lookup
-            result = await _dict_lookup(word)
-            defs = result.get("definitions", [])
-            phonetic = result.get("phonetic", "")
-            base = f"**{word}**"
-            if phonetic:
-                base += f" /{phonetic}/"
-            base += "\n" + "\n".join(f"  - {d}" for d in defs)
-            if context_sentence:
-                base += f"\n\n（上下文：{context_sentence}）"
-            return base
-        except Exception as exc:
-            return f"查词失败: {exc}"
-
+    # Use a synchronous stub path when no API key is configured (test/offline mode)
+    # and the real async call when running inside an event loop via a thread pool.
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # We're inside an async context; schedule and return immediately.
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _lookup())
-                return future.result(timeout=15)
+        from app.tools.dictionary import _stub_definition, _APP_KEY, _APP_SECRET
+
+        if not _APP_KEY or not _APP_SECRET:
+            result = _stub_definition(word)
         else:
-            return loop.run_until_complete(_lookup())
+            import asyncio
+            from app.tools.dictionary import lookup_word as _dict_lookup
+            result = asyncio.run(_dict_lookup(word))
+
+        defs = result.get("definitions", [])
+        phonetic = result.get("phonetic", "")
+        output = f"**{word}**"
+        if phonetic:
+            output += f" /{phonetic}/"
+        output += "\n" + "\n".join(f"  - {d}" for d in defs)
+        if context_sentence:
+            output += f"\n\n（上下文：{context_sentence}）"
+        return output
     except Exception as exc:
         return f"查词失败: {exc}"
 

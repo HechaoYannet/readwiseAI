@@ -58,7 +58,7 @@ class SM2Item(BaseModel):
             elif self.repetitions == 1:
                 self.interval_days = 6
             else:
-                self.interval_days = round(self.interval_days * self.easiness)
+                self.interval_days = int(round(self.interval_days * self.easiness))
             self.repetitions += 1
         else:
             # Reset on failure

@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 _SESSIONS_DIR = Path(__file__).parent.parent.parent / "data" / "working" / "sessions"
 
+# Maximum conversation messages to retain (20 turns × 2 messages per turn)
+_MAX_CONVERSATION_MESSAGES = 40
+
 
 class WorkingMemory(BaseModel):
     """Session-level working memory.
@@ -96,9 +99,9 @@ class WorkingMemory(BaseModel):
             content: The message text.
         """
         self.conversation_history.append({"role": role, "content": content})
-        # Keep only the last 20 turns to avoid unbounded growth
-        if len(self.conversation_history) > 40:
-            self.conversation_history = self.conversation_history[-40:]
+        # Keep only the most recent messages; oldest are dropped first (FIFO)
+        if len(self.conversation_history) > _MAX_CONVERSATION_MESSAGES:
+            self.conversation_history = self.conversation_history[-_MAX_CONVERSATION_MESSAGES:]
         self.save()
 
     # ------------------------------------------------------------------

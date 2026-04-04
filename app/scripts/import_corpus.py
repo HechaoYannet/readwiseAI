@@ -135,14 +135,16 @@ def _build_markdown(raw: Dict[str, Any]) -> str:
             )
         lines.append("")
 
-    for cs in raw.get("complex_sentences", []):
-        lines += [
-            "## 长难句",
-            f"> \"{cs.get('sentence', '')}\"",
-            f"**结构**: {cs.get('structure', '')}",
-            f"**翻译**: {cs.get('translation', '')}",
-            "",
-        ]
+    complex_sentences = raw.get("complex_sentences", [])
+    if complex_sentences:
+        lines += ["## 长难句", ""]
+        for cs in complex_sentences:
+            lines += [
+                f"> \"{cs.get('sentence', '')}\"",
+                f"**结构**: {cs.get('structure', '')}",
+                f"**翻译**: {cs.get('translation', '')}",
+                "",
+            ]
 
     return "\n".join(lines)
 
