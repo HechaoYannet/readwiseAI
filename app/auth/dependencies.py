@@ -12,7 +12,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+        credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> TokenData:
     """Extract and validate the JWT from the Authorization header."""
     if credentials is None:

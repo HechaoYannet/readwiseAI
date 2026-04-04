@@ -1,6 +1,6 @@
 """Authentication API routes."""
 from __future__ import annotations
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, status, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.auth.dependencies import get_current_user
@@ -78,7 +78,7 @@ async def logout() -> dict:
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_token(
-    token_data=Depends(get_current_user),
+        token_data=Depends(get_current_user),
 ) -> RefreshResponse:
     """Issue a new token if the current one is close to expiry."""
     new_token = create_access_token(
