@@ -35,9 +35,14 @@ def _safe_user_dir(base_dir: Path, user_id: str) -> Path:
         raise ValueError(f"Invalid user_id: {user_id!r}")
     resolved_base = base_dir.resolve()
     user_dir = (base_dir / user_id).resolve()
-    if not str(user_dir).startswith(str(resolved_base) + "/") and user_dir != resolved_base:
+    try:
+        user_dir.relative_to(resolved_base)
+    except ValueError:
         raise ValueError(f"Path traversal detected for user_id: {user_id!r}")
     return user_dir
+    # if not user_dir.as_posix().startswith(resolved_base.as_posix() + "/") and user_dir != resolved_base:
+    #     raise ValueError(f"Path traversal detected for user_id: {user_id!r}")
+    # return user_dir
 
 
 class WorkingMemory(BaseModel):

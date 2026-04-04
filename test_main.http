@@ -9,3 +9,67 @@ GET http://127.0.0.1:8000/hello/User
 Accept: application/json
 
 ###
+# 1. 验证邀请码
+# curl -X POST http://localhost:8000/api/auth/verify-invite
+#  -H "Content-Type: application/json"
+#  -d '{"invite_code": "ABC12345"}'
+POST http://localhost:8000/api/auth/verify-invite
+Content-Type: application/json
+
+{"invite_code": "RJSKKFZF"}
+
+###
+# 2. 注册
+
+
+# curl -X POST http://localhost:8000/api/auth/register
+#  -H "Content-Type: application/json"
+#  -d '{
+#    "invite_code": "ABC12345",
+#    "username": "张三",
+#    "exam_region": "全国I卷",
+#    "grade": "高三"
+#  }'
+POST http://localhost:8000/api/auth/register
+Content-Type: application/json
+
+{
+    "invite_code": "RJSKKFZF",
+    "username": "张三",
+    "exam_region": "全国I卷",
+    "grade": "高三"
+  }
+
+
+###
+# curl -X POST http://localhost:8000/api/attempt
+#  -H "Content-Type: application/json"
+#  -d '{
+#    "user_id": "student_001",
+#    "request_type": "attempt",
+#    "paragraph": "The industrial revolution changed society...",
+#    "question_text": "What is the main idea of this passage?",
+#    "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+#    "user_answer": "A",
+#    "correct_answer": "C",
+#    "time_spent": 45
+#  }'
+POST http://localhost:8000/api/attempt
+Content-Type: application/json
+
+{
+    "user_id": "9f1291fc-c8f7-4b85-8057-5b414abd9a32",
+    "request_type": "attempt",
+    "paragraph": "The industrial revolution changed society...",
+    "question_text": "What is the main idea of this passage?",
+    "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+    "user_answer": "A",
+    "correct_answer": "C",
+    "time_spent": 45
+  }
+
+###
+# curl http://localhost:8000/api/result/req_xxxxxxxxxxxxxx
+GET http://localhost:8000/api/result/{req_86b750771f02}
+Accept: application/json
+

@@ -1,0 +1,18 @@
+### GET request to example server
+GET https://examples.http-client.intellij.net/get
+    ?generated-in=PyCharm
+
+### POST attempt request to  server
+POST http://localhost:8000/api/attempt
+Content-Type: application/json
+
+{
+    "user_id": "u1",
+    "request_type": "attempt",
+    "paragraph": "The industrial revolution changed society...",
+    "question_text": "What is the main idea of this passage?",
+    "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
+    "user_answer": "A",
+    "correct_answer": "C",
+    "time_spent": 45
+  }
