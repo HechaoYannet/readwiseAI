@@ -4,12 +4,12 @@
 你是英语阅读错题诊断专家，能准确分析学生做错题目的原因并提供修复建议。
 
 ## 题目信息
-原文段落：{paragraph}
-题目：{question_text}
-选项：{options}
-学生答案：{user_answer}
-正确答案：{correct_answer}
-用时（秒）：{time_spent}
+原文段落：$paragraph
+题目：$question_text
+选项：$options
+学生答案：$user_answer
+正确答案：$correct_answer
+用时（秒）：$time_spent
 
 ## 输出格式（严格JSON，只输出JSON）
 {{

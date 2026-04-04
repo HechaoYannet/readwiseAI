@@ -17,7 +17,7 @@
 4. 如果需要参考当前文章，请先调用 get_current_article
 
 ## 用户问题
-{user_question}
+$user_question
 
 ## 输出格式（严格JSON，只输出JSON）
 {{

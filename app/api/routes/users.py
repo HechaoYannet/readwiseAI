@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.auth.dependencies import get_current_user
 from app.auth.models import ChangePasswordRequest, TokenData
 from app.services import user_service
+from app.models import working_memory
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -30,8 +31,8 @@ async def get_me(token_data: TokenData = Depends(get_current_user)) -> Dict[str,
 
 @router.put("/me")
 async def update_me(
-    body: UpdateUserRequest,
-    token_data: TokenData = Depends(get_current_user),
+        body: UpdateUserRequest,
+        token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Update current user's profile."""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -67,8 +68,8 @@ async def get_stats(token_data: TokenData = Depends(get_current_user)) -> Dict[s
 
 @router.put("/password")
 async def change_password(
-    body: ChangePasswordRequest,
-    token_data: TokenData = Depends(get_current_user),
+        body: ChangePasswordRequest,
+        token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Change the current user's password."""
     ok, err, err_code = user_service.change_password(
@@ -85,3 +86,15 @@ async def change_password(
         )
         raise HTTPException(status_code=http_status, detail=err)
     return {"message": "密码修改成功，请重新登录"}
+
+
+@router.get("/train/currSession")
+async def get_current_training_session(token_data: TokenData = Depends(get_current_user)) -> Dict[str, Any]:
+    """Get the current training session for the user."""
+    session = working_memory.WorkingMemory.load_session_list(
+        "training", token_data.user_id
+    )[0]
+    session = working_memory.WorkingMemory.load(session_id=session, user_id=token_data.user_id).model_dump()
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="没有正在进行的训练")
+    return session

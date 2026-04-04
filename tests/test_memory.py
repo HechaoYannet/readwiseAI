@@ -86,9 +86,9 @@ class TestWorkingMemory:
         try:
             from app.models.working_memory import WorkingMemory
             wm = WorkingMemory(session_id="sess_003", user_id="u3")
-            wm.current_questions = [{"q": "old"}]
+            wm.question_queue = [{"q": "old"}]
             wm.set_article({"title": "New Article", "content": "Some text"})
-            assert wm.current_questions == []
+            assert wm.question_queue == []
             assert wm.get_article_title() == "New Article"
         finally:
             wm_module._SESSIONS_DIR = original

@@ -4,7 +4,9 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Dict, List
+from string import  Template
 
+from app.models.state import OrchestratorState
 from app.sub_agents.base import BaseSubAgent
 
 logger = logging.getLogger(__name__)
@@ -14,16 +16,16 @@ _FALLBACK_PROMPT = """
 你是高考英语出题专家。请根据以下文章，一次性生成 {count} 道不同题型的阅读理解题。
 
 ## 文章
-{article}
+$article
 
 ## 题型要求
-{question_types_str}
+$question_types_str
 
 ## 难度
-{difficulty}（L1最简单，L4最难）
+$difficulty（L1最简单，L4最难）
 
 ## 参考语料风格
-{corpus_examples}
+$corpus_examples
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -48,7 +50,7 @@ class QuestionExpert(BaseSubAgent):
     description = "题目生成、选项设计（支持连续出题）"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any]
+        self, input: Dict[str, Any], context: Dict[str, Any],state: OrchestratorState
     ) -> Dict[str, Any]:
         start = time.time()
         article = input.get("article", "")
@@ -124,7 +126,7 @@ class QuestionExpert(BaseSubAgent):
         )
 
         template = self.load_prompt("question_prompt") or _FALLBACK_PROMPT
-        prompt = template.format(
+        prompt = Template(template).substitute(
             article=article,
             difficulty=difficulty,
             count=count,

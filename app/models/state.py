@@ -41,6 +41,7 @@ class SubTask(BaseModel):
 class OrchestratorState(BaseModel):
     request_id: str
     user_id: str
+    session_id: str
     status: RequestStatus = RequestStatus.PENDING
     original_request: Dict[str, Any] = Field(default_factory=dict)
     current_plan: Dict[str, Any] = Field(default_factory=dict)
@@ -51,7 +52,6 @@ class OrchestratorState(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     # Memory context – populated by the Dispatcher before agent execution
-    session_id: Optional[str] = None
     working_memory: Optional[Dict[str, Any]] = None
     long_term_memory: Optional[Dict[str, Any]] = None
 
@@ -66,18 +66,19 @@ class AttemptRequest(BaseModel):
     # Optional overrides for corpus / question / qa requests
     request_type: str = "attempt"  # attempt | corpus | question | qa | training_set
     query_type: Optional[str] = None  # for qa: word/sentence/grammar/translate/free
-    content: Optional[str] = None    # for qa queries
+    content: Optional[str] = None  # for qa queries
     context_sentence: Optional[str] = None
     difficulty: Optional[str] = None  # L1/L2/L3/L4
-    genre: Optional[str] = None       # argumentative/expository/narrative
+    genre: Optional[str] = None  # argumentative/expository/narrative
     topic: Optional[str] = None
     word_count: Optional[int] = None
     article: Optional[str] = None
     question_type: Optional[str] = None  # detail/inference/vocabulary/main_idea
     question_types: Optional[List[str]] = None  # list of question types for multi-question
     count: Optional[int] = None
-    session_id: Optional[str] = None  # session identifier for working memory
+    session_id: str  # session identifier for working memory
     # Corpus expert extended options
-    enable_planning: Optional[bool] = None   # training_set: trigger corpus planning mode
-    reference_id: Optional[str] = None       # corpus article ID for stylized generation
-    user_level: Optional[str] = None         # overall user level hint for planning
+    enable_planning: Optional[bool] = None  # training_set: trigger corpus planning mode
+    reference_id: Optional[str] = None  # corpus article ID for stylized generation
+    user_level: Optional[str] = None  # overall user level hint for planning
+    question_number: Optional[str] = None  # for conveniently managing and recording questions, e.g. "A1", "C4", etc.

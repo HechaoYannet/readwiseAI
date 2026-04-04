@@ -4,6 +4,13 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Dict, Optional
+from string import Template
+
+from pydantic import json
+
+from app import orchestrator
+from app.models import working_memory
+from app.models.state import OrchestratorState
 
 from app.sub_agents.base import BaseSubAgent
 
@@ -13,12 +20,12 @@ DIAGNOSIS_PROMPT = """
 你是英语阅读错题诊断专家。请分析学生做错的原因并提供修复建议。
 
 ## 题目信息
-原文段落：{paragraph}
-题目：{question_text}
-选项：{options}
-学生答案：{user_answer}
-正确答案：{correct_answer}
-用时（秒）：{time_spent}
+原文段落：$paragraph
+题目：$question_text
+选项：$options
+学生答案：$user_answer
+正确答案：$correct_answer
+用时（秒）：$time_spent
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -34,8 +41,8 @@ SIMILAR_QUESTION_PROMPT = """
 你是英语出题专家。请根据以下信息生成一道同类型题目。
 
 ## 原题错因
-错误类型：{error_category}
-原题主题：{paragraph_summary}
+错误类型：$error_category
+原题主题：$paragraph_summary
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -53,14 +60,14 @@ class DiagnosisExpert(BaseSubAgent):
     description = "错因分析、同类题生成"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any]
+            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
     ) -> Dict[str, Any]:
         start = time.time()
 
-        diagnosis = await self._analyze_error(input)
+        diagnosis = await self._analyze_error(input, state)
         similar: Optional[Dict[str, Any]] = None
         if input.get("need_similar", True):
-            similar = await self._generate_similar(input, diagnosis)
+            similar = await self._generate_similar(input, diagnosis, state)
 
         return {
             "diagnosis": diagnosis,
@@ -71,7 +78,7 @@ class DiagnosisExpert(BaseSubAgent):
             },
         }
 
-    async def _analyze_error(self, input: Dict[str, Any]) -> Dict[str, Any]:
+    async def _analyze_error(self, input: Dict[str, Any], state: OrchestratorState) -> Dict[str, Any]:
         # Quick rule-based shortcut: if user_answer == correct_answer it's not really wrong
         if input.get("user_answer") == input.get("correct_answer"):
             return {
@@ -84,7 +91,7 @@ class DiagnosisExpert(BaseSubAgent):
 
         # Try to load prompt from file; fall back to inline template
         template = self.load_prompt("diagnosis_prompt") or DIAGNOSIS_PROMPT
-        prompt = template.format(
+        prompt = Template(template).substitute(
             paragraph=input.get("paragraph", ""),
             question_text=input.get("question_text", ""),
             options=input.get("options", {}),
@@ -101,16 +108,23 @@ class DiagnosisExpert(BaseSubAgent):
                 "suggestion": "",
                 "confidence": 0.0,
             }
+        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
+        wm.add_agent_information(
+            {f"diagnosis_{state.original_request.get("question_number")}": json.dumps(result,
+                                                                                      ensure_ascii=False,
+                                                                                      indent=2)})
         return result
 
     async def _generate_similar(
-        self, input: Dict[str, Any], diagnosis: Dict[str, Any]
+            self, input: Dict[str, Any], diagnosis: Dict[str, Any], state: OrchestratorState
     ) -> Dict[str, Any]:
         paragraph = input.get("paragraph", "")
         summary = paragraph[:100] if paragraph else "英语阅读理解"
-        prompt = SIMILAR_QUESTION_PROMPT.format(
+        prompt = Template(SIMILAR_QUESTION_PROMPT).substitute(
             error_category=diagnosis.get("error_category", ""),
             paragraph_summary=summary,
         )
         result = await self._call_llm(prompt)
+        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
+        wm.add_agent_information({"similar_question": json.dumps(result, ensure_ascii=False, indent=2)})
         return result or {}

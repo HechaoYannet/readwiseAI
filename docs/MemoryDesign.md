@@ -288,11 +288,13 @@ data/long_term/{user_id}/
 ```python
 from langchain.tools import tool
 
+
 @tool
 def get_current_article() -> str:
     """获取学生当前正在阅读的文章全文。当学生问及文章内容时使用。"""
     # 从工作记忆中获取
-    return working_memory.current_article.content
+    return working_memory.articles.content
+
 
 # 问答专家中使用
 qa_llm = llm.bind_tools([get_current_article, search_mistakes, lookup_word])

@@ -141,7 +141,7 @@ def _make_rule_based_plan(user_request: Dict[str, Any]) -> Dict[str, Any]:
                     "assigned_to": "qa_expert",
                     "description": "解答问题",
                     "input": {
-                        "query_type": user_request.get("query_type", "word"),
+                        "query_type": user_request.get("query_type", "free"),
                         "content": user_request.get("content", ""),
                         "context_sentence": user_request.get("context_sentence", ""),
                     },

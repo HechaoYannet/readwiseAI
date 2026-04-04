@@ -4,41 +4,27 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1f0d6803-b5c4-4b12-8372-176217bf1a6e" name="更改" comment="重新组织了文档">
-      <change afterPath="$PROJECT_DIR$/docs/重构.md" afterDir="false" />
+    <list default="true" id="1f0d6803-b5c4-4b12-8372-176217bf1a6e" name="更改" comment="修正了引用">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/UserTest.http" beforeDir="false" afterPath="$PROJECT_DIR$/UserTest.http" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/routes/attempts.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/routes/attempts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/routes/users.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/routes/users.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/models/state.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/models/state.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/models/working_memory.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/models/working_memory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/orchestrator/dispatcher.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/orchestrator/dispatcher.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/orchestrator/planner.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/orchestrator/planner.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_01f9c11edbf2.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_1da2d8da859c.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_545d6c128c7e.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_645e1ab0df18.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_7f3805dee9cd.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_853ce615678f.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_c0b9d5f7eb4a.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_ca52c002d768.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_cab1ef863d68.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_ec24579e1133.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_fba83bec9318.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u1/results/req_fcf19c1e044c.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_05a2a67307c0.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_35e1d0fff931.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_49974dc8dbbc.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_5fd64c5c4c82.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_768fc9a46144.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u2/results/req_aa570d22de77.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_04d0c7248e26.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_51c8298493bb.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_597acd3d3ed1.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_74eec5b08ea8.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_9ada4fad6641.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u3/results/req_c11c10b19dfb.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_26916f1269bc.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_4e07f2837455.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_5038a58fb2a6.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_957cf4e0b5ea.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_c602bde82257.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/users/u4/results/req_e02e6b8e573c.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/sub_agents/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/sub_agents/corpus.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/corpus.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/sub_agents/diagnosis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/diagnosis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/sub_agents/qa.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/qa.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/sub_agents/question.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/question.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/prompts/corpus_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/corpus_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/prompts/diagnosis_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/diagnosis_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/prompts/qa_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/qa_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/prompts/question_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/question_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/MemoryDesign.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/MemoryDesign.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/重构.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/重构.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_memory.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_memory.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -166,6 +152,7 @@
     "Python 调试适配器子进程.Subprocess 6308.executor": "Debug",
     "Python.Admin CLI.executor": "Run",
     "Python.test.executor": "Run",
+    "Python.tete.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
@@ -210,7 +197,7 @@
       </map>
     </option>
   </component>
-  <component name="RunManager" selected="FastAPI.readwise-backend">
+  <component name="RunManager" selected="Python.tete">
     <configuration name="UserTest | GET request to example server" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="GET request to example server" runType="运行单个请求">
       <method v="2" />
     </configuration>
@@ -226,7 +213,7 @@
     <configuration name="UserTest | POST request to verify invite code" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to verify invite code" runType="运行单个请求">
       <method v="2" />
     </configuration>
-    <configuration name="test" type="PythonConfigurationType" factoryName="Python">
+    <configuration name="tete" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="readwise-backend" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -243,10 +230,10 @@
       <option name="DEBUG_JUST_MY_CODE" value="false" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/rag/test_log.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/core/callbacks/tete.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="true" />
+      <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
       <option name="REDIRECT_INPUT" value="false" />
       <option name="INPUT_FILE" value="" />
@@ -282,7 +269,7 @@
       <item itemvalue="HTTP 请求.UserTest | POST request to verify invite code" />
       <item itemvalue="HTTP 请求.UserTest | GET request to example server" />
       <item itemvalue="HTTP 请求.UserTest | POST attempt request to  server" />
-      <item itemvalue="Python.test" />
+      <item itemvalue="Python.tete" />
     </list>
     <recent_temporary>
       <list>
@@ -357,7 +344,15 @@
       <option name="project" value="LOCAL" />
       <updated>1775303358341</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="修正了引用">
+      <option name="closed" value="true" />
+      <created>1775327677724</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1775327677724</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -379,13 +374,31 @@
     <MESSAGE value="修改requirements" />
     <MESSAGE value="修正了路径识别错无的问题" />
     <MESSAGE value="重新组织了文档" />
-    <option name="LAST_COMMIT_MESSAGE" value="重新组织了文档" />
+    <MESSAGE value="修正了引用" />
+    <option name="LAST_COMMIT_MESSAGE" value="修正了引用" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app/sub_agents/corpus.py</url>
+          <line>10</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/app/sub_agents/diagnosis.py</url>
+          <line>3</line>
+          <option name="timeStamp" value="10" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/readwise_backend$readwise_backend.coverage" NAME="readwise-backend 覆盖结果" MODIFIED="1775327369383" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/readwise_backend$.coverage" NAME=" 覆盖结果" MODIFIED="1775298878275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/readwise_backend$test.coverage" NAME="test 覆盖结果" MODIFIED="1775300126328" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/readwise_backend$Admin_CLI.coverage" NAME="Admin CLI 覆盖结果" MODIFIED="1775292795255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/readwise_backend$tete.coverage" NAME="tete 覆盖结果" MODIFIED="1775339631013" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>

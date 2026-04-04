@@ -39,7 +39,7 @@ def _build_memory_context(state: OrchestratorState) -> Dict[str, Any]:
     ctx: Dict[str, Any] = {}
 
     # Working memory
-    session_id = state.session_id or state.request_id
+    session_id = state.session_id
     try:
         from app.models.working_memory import WorkingMemory
 
@@ -93,7 +93,7 @@ def _resolve_task_inputs(task: SubTask, state: OrchestratorState) -> None:
 
 class Dispatcher:
     async def dispatch_all_pending(
-        self, state: OrchestratorState
+            self, state: OrchestratorState
     ) -> OrchestratorState:
         """Execute all PENDING sub-tasks whose dependencies are satisfied."""
         for task in state.sub_tasks:
@@ -112,7 +112,7 @@ class Dispatcher:
         return True
 
     async def _execute_task(
-        self, task: SubTask, state: OrchestratorState
+            self, task: SubTask, state: OrchestratorState
     ) -> OrchestratorState:
         agent = _get_sub_agent(task.assigned_to)
         if agent is None:
@@ -133,7 +133,7 @@ class Dispatcher:
             # Inject memory context
             context.update(_build_memory_context(state))
 
-            result = await agent.execute(task.input, context)
+            result = await agent.execute(task.input, context, state)
             task.result = result
             # Mark as completed here so verifier can inspect it
             task.status = SubTaskStatus.COMPLETED

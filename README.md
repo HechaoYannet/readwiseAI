@@ -289,7 +289,7 @@ readwiseAI/
 | `query_type` | string | qa | `word` / `sentence` / `grammar` / `translate` / `free` |
 | `content` | string | qa | 查询内容 |
 | `context_sentence` | string | qa（word） | 单词所在句子上下文 |
-| `session_id` | string | 否 | 会话 ID（用于工作记忆） |
+| `session_id` | string | ✅ | 会话 ID（用于工作记忆） |
 | `reference_id` | string | corpus | 参考真题的语料库 ID（风格化生成） |
 | `user_level` | string | training_set | 用户整体水平提示（L1–L4），用于总体规划 |
 

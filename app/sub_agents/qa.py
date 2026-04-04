@@ -8,7 +8,10 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Dict, List
+from string import Template
 
+from app.models import working_memory
+from app.models.state import OrchestratorState
 from app.sub_agents.base import BaseSubAgent
 from app.tools.dictionary import lookup_word
 
@@ -22,7 +25,7 @@ SENTENCE_PARSE_PROMPT = """
 你是英语语言学专家。请拆解以下英语长难句的句子结构。
 
 ## 句子
-{sentence}
+$sentence
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -38,7 +41,7 @@ GRAMMAR_PROMPT = """
 你是英语语法专家。请解释以下语法现象。
 
 ## 语法问题
-{grammar_query}
+$grammar_query
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -53,7 +56,7 @@ TRANSLATE_PROMPT = """
 请将以下英文翻译成地道的中文。
 
 ## 原文
-{content}
+$content
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -71,10 +74,10 @@ class QAExpert(BaseSubAgent):
     description = "查词、长难句拆解、语法解释、翻译，支持通过工具访问文章和错题本"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any]
+            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
     ) -> Dict[str, Any]:
         start = time.time()
-        query_type = input.get("query_type", "word")
+        query_type = input.get("query_type", "free")
         content = input.get("content", "")
         context_sentence = input.get("context_sentence", "")
 
@@ -82,7 +85,8 @@ class QAExpert(BaseSubAgent):
         has_memory = bool(
             context.get("working_memory") or context.get("long_term_memory")
         )
-
+        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
+        wm.add_message(role="user", content=content)
         if query_type == "word":
             result = await self._handle_word(content, context_sentence)
         elif query_type == "sentence":
@@ -99,6 +103,8 @@ class QAExpert(BaseSubAgent):
             result = {"error": f"Unknown query_type: {query_type}"}
 
         result["metadata"] = {"latency_ms": self._timed(start), "agent": self.name}
+
+        wm.add_message(role="assistant", content=str(result))
         return result
 
     # ------------------------------------------------------------------
@@ -121,17 +127,17 @@ class QAExpert(BaseSubAgent):
         return {"word": word, "basic_meaning": basic}
 
     async def _handle_sentence(self, sentence: str) -> Dict[str, Any]:
-        prompt = SENTENCE_PARSE_PROMPT.format(sentence=sentence)
+        prompt = Template(SENTENCE_PARSE_PROMPT).substitute(sentence=sentence)
         result = await self._call_llm(prompt)
         return result or {"error": "解析失败"}
 
     async def _handle_grammar(self, query: str) -> Dict[str, Any]:
-        prompt = GRAMMAR_PROMPT.format(grammar_query=query)
+        prompt = Template(GRAMMAR_PROMPT).substitute(grammar_query=query)
         result = await self._call_llm(prompt)
         return result or {"error": "解释失败"}
 
     async def _handle_translate(self, content: str) -> Dict[str, Any]:
-        prompt = TRANSLATE_PROMPT.format(content=content)
+        prompt = Template(TRANSLATE_PROMPT).substitute(content=content)
         result = await self._call_llm(prompt)
         return result or {"error": "翻译失败"}
 
@@ -140,7 +146,7 @@ class QAExpert(BaseSubAgent):
     # ------------------------------------------------------------------
 
     async def _handle_free_with_tools(
-        self, user_question: str, context: Dict[str, Any]
+            self, user_question: str, context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Use LangChain tool-calling to answer a free-form question.
 
@@ -194,11 +200,12 @@ class QAExpert(BaseSubAgent):
                 if response is not None and hasattr(response, "content") and response.content
                 else "（无法生成回答）"
             )
-            return {
+            res = {
                 "answer": final_content,
                 "references": tool_results,
                 "tool_calls_made": tool_calls_made,
             }
+            return res
 
         except Exception as exc:
             logger.error("Tool-calling QA failed: %s", exc)

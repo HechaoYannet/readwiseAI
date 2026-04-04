@@ -11,8 +11,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+from string import Template
 from typing import Any, Dict, List, Optional
 
+from app.models import working_memory
+from app.models.state import OrchestratorState
 from app.sub_agents.base import BaseSubAgent
 
 logger = logging.getLogger(__name__)
@@ -25,13 +28,13 @@ ARTICLE_PROMPT = """
 你是高考英语阅读材料专家。请生成一篇符合高考风格的英语文章。
 
 ## 要求
-难度等级：{difficulty}（L1最简单，L4最难）
-体裁：{genre}（argumentative议论文/expository说明文/narrative记叙文）
-主题：{topic}
-目标字数：{word_count}词
+难度等级：$difficulty（L1最简单，L4最难）
+体裁：$genre（argumentative议论文/expository说明文/narrative记叙文）
+主题：$topic
+目标字数：$word_count 词
 
 ## 参考风格说明
-{style_reference}
+$style_reference
 
 ## 难度对照
 - L1：初中水平，词汇简单，句型短
@@ -40,7 +43,7 @@ ARTICLE_PROMPT = """
 - L4：高考压轴难度，词汇高级，句式复杂
 
 ## 出题描述
-{description}
+$description
 
 ## 输出格式（严格JSON，只输出JSON）
 {{
@@ -58,13 +61,13 @@ PLANNING_PROMPT = """
 你是高考英语训练规划专家。请根据语料库信息和学生学情数据，为本次训练规划4篇文章。
 
 ## 语料库中可参考的真题（按需引用 id）
-{corpus_metadata}
+$corpus_metadata
 
 ## 学生错题摘要
-{mistake_summary}
+$mistake_summary
 
 ## 学生最近战力值记录
-{power_summary}
+$power_summary
 
 ## 规划要求
 - 规划恰好4篇文章，难度总体从易到难（可参考 L2→L2→L3→L3 或 L2→L3→L3→L4）
@@ -167,7 +170,7 @@ class CorpusExpert(BaseSubAgent):
     description = "高考风格文章生成（支持总体规划 / 风格化生成 / 工作记忆同步）"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any]
+        self, input: Dict[str, Any], context: Dict[str, Any],state: OrchestratorState
     ) -> Dict[str, Any]:
         start = time.time()
 
@@ -175,7 +178,7 @@ class CorpusExpert(BaseSubAgent):
         # Mode 1: overall planning
         # ------------------------------------------------------------------
         if input.get("enable_planning"):
-            return await self._run_planning_mode(context, start)
+            return await self._run_planning_mode(context, start, state)
 
         # ------------------------------------------------------------------
         # Mode 2 / 3: article generation (with optional style reference)
@@ -199,8 +202,9 @@ class CorpusExpert(BaseSubAgent):
         article: Dict[str, Any] = {}
         validation: Dict[str, Any] = {"passed": False, "issues": []}
 
+        # 最多尝试3次生成，直到通过基本验证（字数/标题等），每次失败都记录问题并重试
         for attempt in range(3):
-            prompt = template.format(
+            prompt = Template(template).substitute(
                 difficulty=difficulty,
                 genre=genre,
                 topic=topic,
@@ -251,7 +255,7 @@ class CorpusExpert(BaseSubAgent):
     # ------------------------------------------------------------------
 
     async def _run_planning_mode(
-        self, context: Dict[str, Any], start: float
+        self, context: Dict[str, Any], start: float, state: OrchestratorState
     ) -> Dict[str, Any]:
         """Read corpus + user data, generate a 4-article training plan."""
         # 1. Corpus index
@@ -286,7 +290,7 @@ class CorpusExpert(BaseSubAgent):
             except Exception as exc:
                 logger.warning("Failed to read power history in planning: %s", exc)
 
-        prompt = PLANNING_PROMPT.format(
+        prompt = Template(PLANNING_PROMPT).substitute(
             corpus_metadata=corpus_metadata_str,
             mistake_summary=mistake_summary,
             power_summary=power_summary,
@@ -300,7 +304,7 @@ class CorpusExpert(BaseSubAgent):
         # Build new sub-tasks for dynamic injection by the Orchestrator
         new_sub_tasks = _build_training_sub_tasks(training_plan)
 
-        return {
+        res= {
             "training_plan": training_plan,
             "new_sub_tasks": new_sub_tasks,
             "metadata": {
@@ -309,6 +313,9 @@ class CorpusExpert(BaseSubAgent):
                 "mode": "planning",
             },
         }
+        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
+        wm.add_agent_information({"corpus_expert_planning": res})
+        return res
 
     # ------------------------------------------------------------------
     # Helpers
@@ -334,7 +341,7 @@ class CorpusExpert(BaseSubAgent):
             return (
                 f"参考真题（{meta.get('source', reference_id)}，"
                 f"难度 {meta.get('difficulty', '?')}，"
-                f"体裁 {meta.get('genre', '?')}）：\n{content[:800]}"
+                f"体裁 {meta.get('genre', '?')}）：\n{content}"
             )
         except Exception as exc:
             logger.warning("Failed to load style reference %s: %s", reference_id, exc)
@@ -348,6 +355,7 @@ class CorpusExpert(BaseSubAgent):
         if wm is None:
             return
         try:
+            wm: working_memory.WorkingMemory
             wm.set_article({
                 "title": article.get("title", ""),
                 "content": article.get("content", ""),

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict
 
+from app.models.state import OrchestratorState
 from app.services.llm_service import llm_json_call
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class BaseSubAgent(ABC):
     description: str = ""
 
     @abstractmethod
-    async def execute(self, input: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState) -> Dict[str, Any]:
         """Execute the sub-task and return a result dict."""
 
     async def _call_llm(self, prompt: str) -> Dict[str, Any]:
