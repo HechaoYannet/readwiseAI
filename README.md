@@ -26,6 +26,8 @@ ReadWise AI 通过 AI 驱动的多个专家 Sub-Agent，为高中生提供**错�
 10. [外部依赖](#10-外部依赖)
 11. [配置与环境变量](#11-配置与环境变量)
 12. [测试](#12-测试)
+13. [POST /api/attempt 代码分析与结果值流动](#13-post-apiattempt-代码分析与结果值流动)
+14. [傻瓜式任务操作指南](#14-傻瓜式任务操作指南)
 
 ---
 
@@ -269,13 +271,17 @@ uvicorn app.main:app --reload --port 8000
 
 `POST /api/attempt` 的 `request_type` 字段决定 AI 执行何种任务：
 
+> **关于 `session_id`：** JSON body 中**必须包含该字段**（`str` 无默认值，不传则 HTTP 422）。传空字符串 `""` 时服务端自动生成随机 ID，建议传有意义的固定字符串便于通过 Session API 查询会话内容。
+
 | request_type | 功能 | 主要输入字段 |
 |-------------|------|------------|
 | `attempt` | 错题诊断 + 同类题 | `paragraph`, `question_text`, `options`, `user_answer`, `correct_answer`, `time_spent` |
 | `corpus` | 生成单篇文章 | `difficulty`(L1-L4), `genre`, `topic`, `word_count`, `reference_id` |
-| `question` | 为文章出题 | `article`, `question_types`, `difficulty`, `count` |
+| `question` | 为文章出题 | `article`, `question_type`(单题型), `difficulty`, `count` |
 | `qa` | 问答辅导 | `query_type`(word/sentence/grammar/translate/free), `content`, `context_sentence` |
 | `training_set` | 完整训练题组（4篇文章+题目） | `user_level` |
+
+> **注意（question 类型）：** 规则 Planner 只转发 `question_type`（单值）给 QuestionExpert，AttemptRequest 中的 `question_types`（列表）不会被规则 fallback Planner 转发。建议使用 `question_type` + `count` 组合。
 
 **示例 – 提交错题分析：**
 
@@ -452,4 +458,281 @@ python -m pytest tests/test_agent.py -v
 
 ---
 
-*ReadWise AI v0.2.0 | FastAPI + LangChain + OpenAI*
+---
+
+## 13. POST /api/attempt 代码分析与结果值流动
+
+> 本节对 `POST /api/attempt` 涉及的全部代码进行逐层分析，梳理各参数情况下的值流动，并给出所有情况下 `GET /api/result` 的 JSON 结构。
+
+---
+
+### 13.1 入口：路由层（app/api/routes/attempts.py）
+
+```
+路径：app/api/routes/attempts.py
+注册：app/main.py → app.include_router(attempts.router, prefix="/api")
+最终路径：POST /api/attempt
+```
+
+**逐行执行步骤：**
+
+| 步骤 | 说明 |
+|------|------|
+| 1 | JWT Bearer Token 验证 → 提取 `user_id`（前端不传，从 Token 解析） |
+| 2 | 生成 `request_id`（格式：`req_` + 12位随机 hex，如 `req_a3f7c9b12d4e`） |
+| 3 | `session_id = attempt.session_id or "session_" + uuid[:12]`（传空字符串则自动生成） |
+| 4 | 创建 `OrchestratorState(status=PENDING)` 并持久化到 `data/users/{user_id}/checkpoints/{request_id}.json` |
+| 5 | 将 `orchestrator.process_request` 注册为 FastAPI BackgroundTasks |
+| 6 | **立即返回** `{request_id, session_id, status:"processing", result_url}` |
+
+**注意：** `session_id` 在 Pydantic 模型中声明为 `str`（无默认值），是**必填字段**。传空字符串 `""` 时服务端自动生成。
+
+---
+
+### 13.2 AttemptRequest 字段映射（app/models/state.py）
+
+| 字段 | 类型 | 默认值 | 传递给哪个 Sub-Agent |
+|------|------|--------|---------------------|
+| `request_type` | str | `"attempt"` | Planner 路由判断 |
+| `session_id` | str | *(必填)* | WorkingMemory 键 |
+| `paragraph` | str | `""` | diagnosis_expert |
+| `question_text` | str | `""` | diagnosis_expert |
+| `options` | dict | `{}` | diagnosis_expert |
+| `user_answer` | str | `""` | diagnosis_expert |
+| `correct_answer` | str | `""` | diagnosis_expert |
+| `time_spent` | int | `0` | diagnosis_expert |
+| `question_number` | str | None | WorkingMemory key suffix（`diagnosis_{question_number}`） |
+| `difficulty` | str | None | corpus_expert / question_expert |
+| `genre` | str | None | corpus_expert |
+| `topic` | str | None | corpus_expert |
+| `word_count` | int | None | corpus_expert |
+| `reference_id` | str | None | corpus_expert（触发风格化模式） |
+| `article` | str | None | question_expert |
+| `question_type` | str | None | question_expert（单题型，规则 Planner 转发） |
+| `question_types` | list | None | question_expert（多题型，**规则 Planner 不转发**，仅 LLM Planner 可能识别） |
+| `count` | int | None | question_expert（默认 3） |
+| `query_type` | str | None | qa_expert（word/sentence/grammar/translate/free） |
+| `content` | str | None | qa_expert |
+| `context_sentence` | str | None | qa_expert（word 模式下补充上下文含义） |
+| `user_level` | str | None | corpus_expert 规划模式（L1-L4 整体水平） |
+| `enable_planning` | bool | None | corpus_expert（触发规划模式，training_set 时由 Planner 注入） |
+
+---
+
+### 13.3 Orchestrator 主控流程（app/orchestrator/agent.py）
+
+```
+process_request()
+  → _run(state)，最多迭代 20 次
+
+PENDING → PLANNING:
+  Planner.plan(state)
+    1. LLM 优先（llm_json_call(PLANNING_PROMPT)）
+    2. fallback: _make_rule_based_plan(user_request)
+       → 按 request_type 生成 SubTask 列表
+  → WAITING
+
+WAITING:
+  Dispatcher.dispatch_all_pending(state)
+    → 解析 article_task_id 跨任务引用
+    → 注入 WorkingMemory + LongTermMemory + CorpusRepo
+    → 调用 SubAgent.execute()
+  Verifier.verify(state, completed_task)
+    → passed=true: completed_results[task_id] = result
+    → passed=false + retry_count<2: RETRY
+    → passed=false + retry_count>=2: task.status=FAILED
+  _inject_new_tasks(state, completed_task)
+    → 追加 new_sub_tasks 到 state.sub_tasks（training_set 场景）
+  → 所有任务完成: COMPLETED / FAILED
+
+→ _finalize(state):
+    _assemble_result() → {request_id, status, results, error_log}
+    checkpoint.save_result() → data/users/{user_id}/results/{request_id}.json
+    checkpoint.delete()      → 清理 checkpoints 文件
+```
+
+---
+
+### 13.4 各 request_type 的 SubTask 生成规则
+
+| request_type | 规则 Planner 生成的 SubTask | 备注 |
+|---|---|---|
+| `attempt` | `sub_001` → `diagnosis_expert`，input 包含 paragraph/question_text/options/user_answer/correct_answer/time_spent/need_similar=True | need_similar 始终为 True |
+| `corpus` | `sub_001` → `corpus_expert`，input 包含 difficulty/genre/topic/word_count/reference_id/description | reference_id 触发风格化模式 |
+| `question` | `sub_001` → `question_expert`，input 包含 article/question_type/difficulty/count | **只转发 question_type，不转发 question_types** |
+| `qa` | `sub_001` → `qa_expert`，input 包含 query_type/content/context_sentence | |
+| `training_set` | `sub_000` → `corpus_expert(enable_planning=True)` + 动态注入 dyn_c1~c4 / dyn_q1~q4 | sub_000 完成后注入 8 个子任务 |
+
+---
+
+### 13.5 GET /api/result 完整 JSON 结构（所有情况）
+
+**通用外壳（_assemble_result 固定格式）：**
+
+```json
+// 处理中
+{ "request_id": "req_...", "status": "processing" }
+
+// 完成（error_log 始终存在，成功时为 []）
+{
+  "request_id": "req_...",
+  "status": "completed",
+  "results": { /* 见下方 */ },
+  "error_log": []
+}
+
+// 失败
+{
+  "request_id": "req_...",
+  "status": "failed",
+  "results": {},
+  "error_log": ["任务sub_001验收失败: [...]"]
+}
+
+// 未找到
+{ "status": "not_found" }
+```
+
+**request_type=attempt 的 results：**
+```json
+{
+  "sub_001": {
+    "diagnosis": {
+      "error_category": "词汇理解 | 推理判断 | 细节查找 | 主旨理解 | 无错误 | 未知",
+      "explanation": "...",
+      "evidence_sentence": "...",
+      "suggestion": "...",
+      "confidence": 0.92
+    },
+    "similar_question": {
+      "paragraph": "...", "question": "...",
+      "options": {"A":"...","B":"...","C":"...","D":"..."},
+      "correct_answer": "B", "explanation": "..."
+    },
+    "metadata": { "latency_ms": 2100, "agent": "diagnosis_expert" }
+  }
+}
+```
+
+**request_type=corpus 的 results：**
+```json
+{
+  "sub_001": {
+    "article": {
+      "title": "...", "content": "...", "word_count": 312,
+      "difficulty_actual": "L2", "genre_actual": "expository",
+      "key_vocabulary": ["word1","word2"],
+      "grammar_highlights": ["定语从句","状语从句"]
+    },
+    "validation": { "passed": true, "issues": [] },
+    "metadata": { "attempts": 1, "latency_ms": 3200, "agent": "corpus_expert", "reference_id": null }
+  }
+}
+```
+
+**request_type=question 的 results：**
+```json
+{
+  "sub_001": {
+    "questions": [
+      {
+        "question_text": "...", "options": {"A":"...","B":"...","C":"...","D":"..."},
+        "correct_answer": "C", "explanation": "...", "evidence": "...",
+        "type": "detail | inference | vocabulary | main_idea"
+      }
+    ],
+    "metadata": { "latency_ms": 1800, "agent": "question_expert", "count": 3 }
+  }
+}
+```
+
+**request_type=qa 各 query_type 的 results：**
+
+`word`（无 context_sentence）：
+```json
+{ "sub_001": { "word": "...", "basic_meaning": {"word":"...","translation":"...","success":true}, "metadata": {...} } }
+```
+
+`word`（有 context_sentence）：
+```json
+{ "sub_001": { "word": "...", "basic_meaning": {...}, "context_meaning": "...", "usage_notes": "...", "metadata": {...} } }
+```
+
+`sentence`：
+```json
+{ "sub_001": { "main_clause": "...", "subordinate_clauses": ["..."], "translation": "...", "structure_analysis": "...", "key_grammar_points": ["..."], "metadata": {...} } }
+```
+
+`grammar`：
+```json
+{ "sub_001": { "grammar_point": "...", "explanation": "...", "examples": ["..."], "common_mistakes": ["..."], "metadata": {...} } }
+```
+
+`translate`：
+```json
+{ "sub_001": { "translation": "...", "notes": "...", "metadata": {...} } }
+```
+
+`free`（有记忆）：
+```json
+{ "sub_001": { "answer": "...", "references": ["[工具名]: 结果..."], "tool_calls_made": 2, "metadata": {...} } }
+```
+
+`free`（无记忆）：
+```json
+{ "sub_001": { "answer": "...", "references": [], "follow_up": "...", "metadata": {...} } }
+```
+
+**request_type=training_set 的 results（9个键）：**
+```json
+{
+  "sub_000": {
+    "training_plan": [
+      { "idx": 1, "topic": "...", "reference_id": "gk_2024_001", "grammar_points": ["定语从句"], "difficulty": "L2", "word_count": 280, "genre": "expository", "description": "..." },
+      { "idx": 2, ... }, { "idx": 3, ... }, { "idx": 4, ... }
+    ],
+    "new_sub_tasks": [ /* SubTask dict 列表，前端可忽略 */ ],
+    "metadata": { "latency_ms": 3000, "agent": "corpus_expert", "mode": "planning" }
+  },
+  "dyn_c1": { "article": {...}, "validation": {...}, "metadata": { "agent": "corpus_expert", "reference_id": "..." } },
+  "dyn_q1": { "questions": [{...},{...},{...},{...}], "metadata": { "agent": "question_expert", "count": 4 } },
+  "dyn_c2": { ... }, "dyn_q2": { ... },
+  "dyn_c3": { ... }, "dyn_q3": { ... },
+  "dyn_c4": { ... }, "dyn_q4": { ... }
+}
+```
+
+---
+
+### 13.6 已知问题与注意事项
+
+| 问题 | 位置 | 说明 |
+|------|------|------|
+| 无用 import | `attempts.py` line 8 | `from pip._internal.network import session` 为无效导入，不影响功能但需清理 |
+| pydantic.json 用法 | `diagnosis.py` line 9 | `from pydantic import json` 在 Pydantic v2 中已弃用，应改用 `import json` |
+| session_id 必填 | `AttemptRequest` | `session_id` 声明为 `str`（无默认值），Pydantic 校验会拒绝未传该字段的请求（HTTP 422） |
+| question_types 未转发 | `planner.py` 规则路径 | 前端传 `question_types` 列表，规则 Planner 只读取 `question_type`（单值），列表被忽略 |
+| LLM 降级无告警 | `verifier.py` | LLM 调用失败时默认 passed=true，静默通过，可能导致低质量结果流出 |
+| Checkpoint 索引不清理 | `checkpoint.py` | `data/request_index/{request_id}` 文件在 `delete()` 后不会删除，长期运行会积累 |
+
+---
+
+## 14. 傻瓜式任务操作指南
+
+> 详细 JSON 结构示例和通用轮询代码请参见 [docs/frontend_follow.md §13-§14](docs/frontend_follow.md)。
+
+### 任务速查表
+
+| 你想做什么 | request_type | 必填字段 | 结果在哪里 |
+|-----------|-------------|---------|-----------|
+| 分析做错的题 | `attempt` | `paragraph`, `question_text`, `options`, `user_answer`, `correct_answer` | `results.sub_001.diagnosis` |
+| 生成一篇文章 | `corpus` | *(可选填 difficulty/genre/topic)* | `results.sub_001.article` |
+| 为文章出题 | `question` | `article` | `results.sub_001.questions` |
+| 查单词 | `qa` + `query_type:"word"` | `content`=单词 | `results.sub_001.basic_meaning` |
+| 拆解长难句 | `qa` + `query_type:"sentence"` | `content`=句子 | `results.sub_001.main_clause` |
+| 语法解释 | `qa` + `query_type:"grammar"` | `content`=问题 | `results.sub_001.grammar_point` |
+| 翻译英文 | `qa` + `query_type:"translate"` | `content`=英文 | `results.sub_001.translation` |
+| 自由提问 | `qa` + `query_type:"free"` | `content`=问题 | `results.sub_001.answer` |
+| 生成完整训练题组 | `training_set` | *(可选填 user_level)* | `results.dyn_c1~c4.article` + `results.dyn_q1~q4.questions` |
+
+所有 request_type 都要传 `session_id`（必填），同一学习任务建议使用同一个 session_id。
