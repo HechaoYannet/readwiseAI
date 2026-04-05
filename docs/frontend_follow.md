@@ -236,7 +236,7 @@ Authorization: Bearer <access_token>
 ```json
 // Request 通用字段
 {
-  "session_id": "session_abc123",    // 必填（可传空字符串 "" 让服务端自动生成）
+  "session_id": "session_abc123",    // 必须包含此字段；传空字符串 "" 则服务端自动生成 ID
   "request_type": "attempt",         // 见 §11 request_type 速查表
   // ...各 request_type 专属字段
 }
@@ -865,9 +865,9 @@ await post('/api/attempt', {
 | `qa` | 问答（查词/句/语法/翻译/自由） | `session_id`, `query_type`, `content` | `context_sentence` |
 | `training_set` | 生成完整训练题组（4篇文章+题目） | `session_id` | `user_level`(L1-L4) |
 
-> **注意：** `session_id` 在所有类型中均为**必填字段**（Pydantic 模型声明为 `str` 无默认值）。若传空字符串 `""` 则服务端自动生成一个随机 session_id，但之后无法通过 Session API 找回该会话。
+> **关于 `session_id`：** JSON body 中**必须包含该字段**（声明为 `str` 无默认值，不传则 HTTP 422）。传空字符串 `""` 时服务端自动生成随机 ID，但之后无法通过 Session API 找回该会话；建议传有意义的固定字符串。
 
-> **注意：** `question` 类型传入 `question_type`（单个字符串），Planner 会将其一路带入 QuestionExpert。若需多种题型（如 `["detail","inference","vocabulary"]`），请传 `question_types`（字符串列表），**但当前规则 Planner 不会自动转发 `question_types`**——LLM Planner 在线上可能会正确识别，规则 fallback 下会忽略。建议配合 `count` 使用 `question_type` 保证准确。
+> **⚠️ 关于 `question_types`（列表）：** 规则 Planner 只转发 `question_type`（单个字符串）给 QuestionExpert；`question_types`（字符串列表）**不会被规则 Planner 转发**，仅 LLM Planner 在线上可能识别。若需准确控制题型，请使用 `question_type` + `count` 组合。
 
 ### request_type = `qa` 的 query_type 说明
 

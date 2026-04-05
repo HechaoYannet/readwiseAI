@@ -271,7 +271,7 @@ uvicorn app.main:app --reload --port 8000
 
 `POST /api/attempt` 的 `request_type` 字段决定 AI 执行何种任务：
 
-> **重要：** `session_id` 在所有类型中均为**必填字段**（Pydantic 模型声明为 `str` 无默认值）。传空字符串 `""` 时服务端自动生成随机 ID，建议传有意义的固定字符串便于通过 Session API 查询会话内容。
+> **关于 `session_id`：** JSON body 中**必须包含该字段**（`str` 无默认值，不传则 HTTP 422）。传空字符串 `""` 时服务端自动生成随机 ID，建议传有意义的固定字符串便于通过 Session API 查询会话内容。
 
 | request_type | 功能 | 主要输入字段 |
 |-------------|------|------------|
