@@ -1,23 +1,38 @@
 """工作记忆会话 API 路由 – 查看、管理会话上下文."""
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import TokenData
+from app.models import working_memory as wm_module
+from app.models.working_memory import WorkingMemory
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+# Only allow safe characters in session IDs (alphanumeric, hyphens, underscores)
+_SESSION_ID_PATTERN = re.compile(r"^[\w\-]+$")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_session(session_id: str, user_id: str):
-    """Load a WorkingMemory session, raising 404 if not found."""
-    from app.models.working_memory import WorkingMemory
+def _validate_session_id(session_id: str) -> None:
+    """Raise 400 if session_id contains unsafe characters."""
+    if not _SESSION_ID_PATTERN.match(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_id 包含非法字符",
+        )
+
+
+def _load_session(session_id: str, user_id: str) -> WorkingMemory:
+    """Validate session_id, then load WorkingMemory; raises 400/404 on failure."""
+    _validate_session_id(session_id)
     wm = WorkingMemory.load(session_id=session_id, user_id=user_id)
     if wm is None:
         raise HTTPException(
@@ -37,7 +52,6 @@ async def list_sessions(
     token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """返回当前用户指定类型的所有会话 ID 列表。"""
-    from app.models.working_memory import WorkingMemory
     ids = WorkingMemory.load_session_list(session_type=session_type, user_id=token_data.user_id)
     return {
         "user_id": token_data.user_id,
@@ -53,7 +67,6 @@ async def get_current_training_session(
     token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """返回最近一次活跃会话的完整内容。会话不存在时返回 404。"""
-    from app.models.working_memory import WorkingMemory
     ids = WorkingMemory.load_session_list(session_type=session_type, user_id=token_data.user_id)
     if not ids:
         raise HTTPException(
@@ -140,11 +153,7 @@ async def delete_session(
     token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """删除指定的工作记忆会话文件（不可恢复）。"""
-    import re
-    from pathlib import Path
-    from app.models import working_memory as wm_module
-
-    # Verify the session exists first
+    # _load_session already validates session_id characters and existence
     _load_session(session_id, token_data.user_id)
 
     user_id = token_data.user_id

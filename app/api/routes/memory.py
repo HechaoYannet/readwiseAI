@@ -207,6 +207,11 @@ class ReviewIn(BaseModel):
     quality: int  # 0-5: recall quality per SM-2
 
 
+# SM-2 quality bounds
+_SM2_QUALITY_MIN = 0
+_SM2_QUALITY_MAX = 5
+
+
 @router.get("/curve", summary="获取遗忘曲线总览")
 async def get_curve_overview(
     token_data: TokenData = Depends(get_current_user),
@@ -257,10 +262,10 @@ async def record_review(
     token_data: TokenData = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """按 SM-2 算法记录复习结果并更新下次复习时间。quality 取值 0-5。"""
-    if not (0 <= body.quality <= 5):
+    if not (_SM2_QUALITY_MIN <= body.quality <= _SM2_QUALITY_MAX):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="quality 必须在 0-5 之间",
+            detail=f"quality 必须在 {_SM2_QUALITY_MIN}-{_SM2_QUALITY_MAX} 之间",
         )
     ltm = _get_ltm(token_data.user_id)
     item = ltm.forgetting_curve.record_review(item_id, body.quality)
