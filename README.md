@@ -26,6 +26,7 @@ ReadWise AI 通过 AI 驱动的多个专家 Sub-Agent，为高中生提供**错�
 10. [外部依赖](#10-外部依赖)
 11. [配置与环境变量](#11-配置与环境变量)
 12. [测试](#12-测试)
+13. [POST /api/attempt 逐行代码分析与调用流程](#13-post-apiattempt-逐行代码分析与调用流程)
 
 ---
 
@@ -452,4 +453,485 @@ python -m pytest tests/test_agent.py -v
 
 ---
 
-*ReadWise AI v0.2.0 | FastAPI + LangChain + OpenAI*
+---
+
+## 13. POST /api/attempt 逐行代码分析与调用流程
+
+> 本节对 `POST /api/attempt` 涉及的全部代码进行逐层分析，并给出完整调用链路图。
+
+---
+
+### 13.1 入口：路由层（app/api/routes/attempts.py）
+
+```
+路径：app/api/routes/attempts.py
+注册：app/main.py → app.include_router(attempts.router, prefix="/api")
+最终路径：POST /api/attempt
+```
+
+**逐行执行步骤：**
+
+| 步骤 | 代码 | 说明 |
+|------|------|------|
+| 1 | `get_current_user(credentials)` | FastAPI Depends 自动触发，解析 Authorization 头中的 JWT Bearer Token |
+| 2 | `token_data.user_id` | 从已验证 Token 中提取 user_id（前端不需要单独传） |
+| 3 | `_generate_request_id()` | 生成 `req_` + 12位随机十六进制字符串，如 `req_a3f7c9b12d4e` |
+| 4 | `session_id = attempt.session_id or "session_" + uuid...` | 使用前端传入的 session_id；若未传则自动生成 |
+| 5 | `OrchestratorState(...)` | 创建初始状态对象（status=PENDING，含 original_request） |
+| 6 | `checkpoint_manager.save(state)` | 将状态序列化为 JSON，写入 `data/users/{user_id}/checkpoints/{request_id}.json`；同时在 `data/request_index/{request_id}` 写入 user_id 实现所有权索引 |
+| 7 | `background_tasks.add_task(orchestrator.process_request, ...)` | 注册后台任务，**立即返回响应**，实际处理异步进行 |
+| 8 | 返回 `{request_id, session_id, status:"processing", result_url}` | 前端凭 request_id 轮询 GET /api/result/{request_id} |
+
+**JWT 验证链（app/auth/dependencies.py → app/auth/jwt_handler.py）：**
+
+- 从 Header 提取 Bearer token → `decode_token()` 验证签名和有效期 → 提取 `sub`（user_id）和 `role` → 返回 `TokenData`
+- 失败路径：token 缺失 → 401 Missing；token 过期 → 401 Expired；无效 token → 401 Invalid
+
+---
+
+### 13.2 数据模型层（app/models/state.py）
+
+**AttemptRequest**：接收前端 POST body，所有字段均为可选（除 session_id），以适应多种 request_type。
+
+| 字段 | 类型 | 用于 request_type |
+|------|------|------------------|
+| `paragraph` / `question_text` / `options` / `user_answer` / `correct_answer` / `time_spent` | str/int/dict | `attempt` |
+| `difficulty` / `genre` / `topic` / `word_count` / `reference_id` | str/int | `corpus` |
+| `article` / `question_type` / `question_types` / `count` | str/list/int | `question` |
+| `query_type` / `content` / `context_sentence` | str | `qa` |
+| `user_level` / `enable_planning` | str/bool | `training_set` |
+| `session_id` | str | 所有类型 |
+| `question_number` | str | 可选，用于记忆跟踪（如 "A1"） |
+
+**OrchestratorState**：贯穿整个处理生命周期的核心状态机对象。
+
+```
+status 枚举流转：
+  PENDING → PLANNING → WAITING → (RETRY →) COMPLETED / FAILED
+```
+
+**SubTask**：每个子任务的数据结构，含 assigned_to、input、acceptance_criteria、depends_on、status、result。
+
+---
+
+### 13.3 状态持久化层（app/orchestrator/checkpoint.py）
+
+| 操作 | 文件路径 | 触发时机 |
+|------|----------|---------|
+| `save(state)` | `data/users/{user_id}/checkpoints/{request_id}.json` | 路由层初始保存；Orchestrator 每次循环等待时保存 |
+| `_write_index()` | `data/request_index/{request_id}` | 写入 user_id，用于所有权校验 |
+| `save_result()` | `data/users/{user_id}/results/{request_id}.json` | 处理完成后写入最终结果 |
+| `delete()` | 删除 checkpoints 中的文件 | 处理完成后清理中间状态 |
+| `load_result()` | `data/users/{user_id}/results/{request_id}.json` | GET /api/result 轮询时读取 |
+
+**安全性：** `_safe_user_dir()` 对 user_id 做正则校验（`^[\w\-]+$`）并用 `resolve().relative_to()` 防止路径穿越攻击。
+
+---
+
+### 13.4 Orchestrator 主控循环（app/orchestrator/agent.py）
+
+`process_request()` 由 BackgroundTasks 调用，内部调用 `_run(state)`，最多循环 20 次：
+
+```
+迭代守卫：for _iteration in range(20)   # 防止无限循环
+
+PENDING:
+  → state.status = PLANNING
+  → 调用 Planner.plan(state)
+  → 若无 sub_tasks → FAILED
+  → state.status = WAITING
+
+WAITING:
+  → dispatcher.dispatch_all_pending(state)   # 分发所有可执行任务
+  → 查找第一个"已完成但未验收"的任务
+    → 若找到：verifier.verify(state, task)
+      → 验收通过：inject_new_tasks() + 检查全部完成
+      → 验收失败可重试：state.status = RETRY
+      → 超出重试上限：task.status = FAILED
+    → 若未找到：
+      → 所有任务完成 → 设置 COMPLETED / FAILED
+      → 否则 → 保存 checkpoint，等待回调
+
+RETRY:
+  → planner.replan(state, failed_task)   # 调整失败任务输入
+  → state.status = WAITING              # 继续主循环
+
+COMPLETED / FAILED:
+  → break，退出循环
+
+→ _finalize(state):
+     _assemble_result() → checkpoint.save_result() → checkpoint.delete()
+```
+
+**动态子任务注入（`_inject_new_tasks`）：**
+- 检查 `completed_task.result["new_sub_tasks"]`
+- 过滤掉已存在 sub_task_id
+- 将新 SubTask 追加到 `state.sub_tasks`
+- 主要由 CorpusExpert 规划模式触发（training_set 场景）
+
+---
+
+### 13.5 Planner（app/orchestrator/planner.py）
+
+**主要职责：** 将 `original_request` 分解为 SubTask 列表。
+
+**执行路径：**
+1. 构建 `PLANNING_PROMPT`（中文系统提示 + 用户请求 JSON + 上下文），调用 `llm_json_call()`
+2. 若 LLM 失败/返回空，退回规则分发（`_make_rule_based_plan()`）
+3. 规则分发逻辑：
+
+| request_type | 生成的 SubTask |
+|---|---|
+| `attempt` | 1个 diagnosis_expert 任务，input 包含题目所有字段 |
+| `corpus` | 1个 corpus_expert 任务，input 包含 difficulty/genre/topic 等 |
+| `question` | 1个 question_expert 任务，input 包含 article/question_types/count |
+| `qa` | 1个 qa_expert 任务，input 包含 query_type/content/context_sentence |
+| `training_set` | 1个 corpus_expert 任务，input 中 `enable_planning=true` |
+
+**Replan（`replan()`）：**
+- 将失败原因（error_log 最后一条）传给 LLM，要求输出调整后的任务 input JSON
+- 重置 task.status = PENDING，task.retry_count += 1
+
+---
+
+### 13.6 Dispatcher（app/orchestrator/dispatcher.py）
+
+**主要职责：** 按依赖顺序执行 SubTask，在执行前注入记忆上下文。
+
+**`dispatch_all_pending(state)` 流程：**
+
+```
+for each task in state.sub_tasks:
+  if task.status != PENDING: continue
+  if not _deps_satisfied(task, state): continue   # 检查 depends_on 依赖
+  await _execute_task(task, state)
+```
+
+**记忆上下文注入（`_build_memory_context(state)`）：**
+
+| context key | 来源 | 说明 |
+|---|---|---|
+| `working_memory` | `WorkingMemory.get_or_create(session_id, user_id)` | 加载 `data/working/sessions/{user_id}/{session_id}.json` |
+| `long_term_memory` | `LongTermMemory(user_id)` | 聚合 mistakes / forgetting / training / power_history |
+| `corpus_repo` | `get_corpus_repo()` | 全局语料库单例（corpus/index.json） |
+| `user_id` | `state.user_id` | 从 JWT 提取的 user_id |
+| `completed_results` | `state.completed_results` | 已完成任务结果（供跨任务引用） |
+
+**跨任务输入解析（`_resolve_task_inputs(task, state)`）：**
+- 若 task.input 中有 `article_task_id`，从 `state.completed_results[article_task_id]["article"]["content"]` 提取文章内容
+- 用于 question_expert 依赖 corpus_expert 输出的场景
+
+**执行异常处理：**
+- 未知 agent name → task.status = FAILED，记录 error_log
+- agent.execute() 抛异常 → task.status = FAILED，记录异常信息
+
+---
+
+### 13.7 Sub-Agent 层
+
+#### DiagnosisExpert（app/sub_agents/diagnosis.py）
+
+**适用 request_type：** `attempt`
+
+**执行步骤：**
+
+| 步骤 | 函数 | 说明 |
+|------|------|------|
+| 1 | `_analyze_error(input, state)` | 若 user_answer == correct_answer，直接返回"无错误"；否则用 DIAGNOSIS_PROMPT 调用 LLM，输出 error_category / explanation / evidence_sentence / suggestion / confidence |
+| 2 | `WorkingMemory.add_agent_information()` | 将诊断结果存入会话记忆（key: `diagnosis_{question_number}`） |
+| 3 | `_generate_similar(input, diagnosis, state)` | 用 SIMILAR_QUESTION_PROMPT 调用 LLM，生成同类型练习题（可通过 `need_similar=false` 跳过） |
+| 4 | `WorkingMemory.add_agent_information()` | 将同类题存入会话记忆（key: `similar_question`） |
+
+**输出结构：**
+```json
+{
+  "diagnosis": {
+    "error_category": "词汇理解 | 推理判断 | 细节查找 | 主旨理解 | 其他",
+    "explanation": "详细错因分析文本",
+    "evidence_sentence": "原文中的关键证据句",
+    "suggestion": "针对性学习建议",
+    "confidence": 0.0
+  },
+  "similar_question": {
+    "paragraph": "新阅读段落（英文）",
+    "question": "题目",
+    "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+    "correct_answer": "A",
+    "explanation": "答案解析"
+  },
+  "metadata": { "latency_ms": 1200, "agent": "diagnosis_expert" }
+}
+```
+
+#### CorpusExpert（app/sub_agents/corpus.py）
+
+**三种模式：**
+
+**模式 1：规划模式（`enable_planning=true`，用于 training_set）**
+1. 加载语料库元数据（corpus_repo）
+2. 加载用户错题摘要 + 战力值历史（long_term_memory）
+3. 调用 LLM 生成训练方案（training_plan，含4篇文章规格）
+4. `_build_training_sub_tasks()` 生成8个动态子任务：
+   - `dyn_c1~c4`：4个 corpus_expert 任务（生成文章）
+   - `dyn_q1~q4`：4个 question_expert 任务（各依赖对应的 dyn_cN）
+5. 返回 `training_plan + new_sub_tasks`（Orchestrator 自动注入这8个任务）
+
+**模式 2：风格化模式（`reference_id` 指定真题 ID）**
+1. 从 corpus_repo 加载指定文章作为风格参考
+2. 调用 LLM 按参考风格生成新文章（最多3次重试）
+3. 验证文章（词数、标题等）
+4. 调用 `_sync_working_memory()` 将文章写入 WorkingMemory
+
+**模式 3：普通模式**
+- 按 difficulty / genre / topic 生成文章，流程同模式2（跳过风格加载）
+
+**普通/风格化模式输出：**
+```json
+{
+  "article": {
+    "title": "文章标题",
+    "content": "正文（英文）",
+    "word_count": 305,
+    "difficulty_actual": "L2",
+    "genre_actual": "expository",
+    "key_vocabulary": ["word1", "word2"],
+    "grammar_highlights": ["highlight1"]
+  },
+  "validation": { "passed": true, "issues": [] },
+  "metadata": { "attempts": 1, "latency_ms": 2300 }
+}
+```
+
+#### QuestionExpert（app/sub_agents/question.py）
+
+**适用 request_type：** `question`，以及 training_set 场景中的 `dyn_q*` 动态任务
+
+**执行步骤：**
+1. 从 context["corpus_repo"] 获取语料库样例（风格参考）
+2. 读取 `article`（来自 task.input 或跨任务解析的 article_task_id）
+3. 确定题型列表：优先 `question_types`，其次 `question_type`，默认 `[detail, inference, vocabulary]`
+4. 单次 LLM 调用，一次性生成所有 count 道题目（QUESTION_PROMPT）
+
+**输出结构：**
+```json
+{
+  "questions": [
+    {
+      "question_text": "...",
+      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+      "correct_answer": "B",
+      "explanation": "...",
+      "evidence": "原文证据句",
+      "type": "detail | inference | vocabulary | main_idea"
+    }
+  ],
+  "metadata": { "latency_ms": 1800, "agent": "question_expert", "count": 3 }
+}
+```
+
+#### QAExpert（app/sub_agents/qa.py）
+
+**适用 request_type：** `qa`
+
+**按 query_type 分发：**
+
+| query_type | 处理函数 | 行为 |
+|---|---|---|
+| `word` | `_handle_word()` | 有道词典 API 查词 → LLM 补充上下文含义 |
+| `sentence` | `_handle_sentence()` | LLM 长难句拆解（主从句、修饰结构） |
+| `grammar` | `_handle_grammar()` | LLM 语法规则解释（结合 grammar.py 规则库） |
+| `translate` | `_handle_translate()` | LLM 英译中，保留语义和语气 |
+| `free`（有记忆） | `_handle_free_with_tools()` | LangChain 工具调用循环（最多5轮），可访问6种记忆工具 |
+| `free`（无记忆） | `_handle_free_simple()` | 直接 LLM 问答 |
+
+**`_handle_free_with_tools()` 的6个 LangChain 工具（app/tools/memory_tools.py）：**
+
+| 工具名 | 功能 |
+|---|---|
+| `get_current_article` | 获取当前 WorkingMemory 中的文章 |
+| `get_conversation_history` | 获取当前会话对话历史 |
+| `get_mistake_summary` | 获取用户错题摘要 |
+| `get_power_history` | 获取战力值历史 |
+| `get_training_records` | 获取训练记录 |
+| `search_corpus` | 在语料库中搜索相关文章 |
+
+---
+
+### 13.8 Verifier（app/orchestrator/verifier.py）
+
+**触发时机：** 每当有 SubTask 完成（status=COMPLETED）但尚未加入 state.completed_results 时触发。
+
+**流程：**
+1. 格式化 acceptance_criteria 为文本
+2. 构建 VERIFICATION_PROMPT，调用 `llm_json_call()`
+3. LLM 失败时 fallback：默认 passed=true，避免卡死流程
+4. 验收通过（passed=true）：将 task.result 写入 `state.completed_results[task_id]`
+5. 验收失败 + retry_count < 2：task.status = RETRY，state.retry_count += 1，记录 issues
+6. 验收失败 + retry_count >= 2：task.status = FAILED，记录最终失败
+
+---
+
+### 13.9 LLM 服务层（app/services/llm_service.py）
+
+所有 LLM 调用均通过 `llm_json_call(prompt)` 统一入口：
+
+| 条件 | 行为 |
+|---|---|
+| 设置了 `OPENAI_API_KEY` | 使用 OpenAI API（ChatOpenAI） |
+| 设置了 `DEEPSEEK_API_KEY` | 使用 DeepSeek（兼容 OpenAI 接口） |
+| 均未设置 | 使用 _StubLLM（返回空 dict，流程降级） |
+| LLM 响应含 Markdown 代码块 | 自动剥离 ``` 标记再解析 JSON |
+| 响应非合法 JSON | 捕获 JSONDecodeError，返回 `{}` |
+| 网络/API 异常 | 捕获所有 Exception，返回 `{}` |
+
+---
+
+### 13.10 完整调用链路图
+
+```
+CLIENT
+  │
+  │  POST /api/attempt
+  │  Authorization: Bearer <jwt>
+  │  Body: { request_type, session_id, ...fields }
+  │
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ app/api/routes/attempts.py :: submit_attempt()                  │
+│                                                                 │
+│  1. get_current_user()  ──►  app/auth/dependencies.py           │
+│     └─ decode_token()   ──►  app/auth/jwt_handler.py            │
+│        → 提取 user_id                                           │
+│                                                                 │
+│  2. AttemptRequest.model_dump()  → 请求字典                     │
+│  3. OrchestratorState(status=PENDING)  → 初始状态               │
+│  4. checkpoint_manager.save(state)                              │
+│     └─ 写 data/users/{user_id}/checkpoints/{request_id}.json    │
+│     └─ 写 data/request_index/{request_id}  (→ user_id)         │
+│  5. background_tasks.add_task(orchestrator.process_request)     │
+│                                                                 │
+│  → 立即返回 { request_id, session_id, status, result_url }      │
+└─────────────────────────────────────────────────────────────────┘
+  │ (后台异步)
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ app/orchestrator/agent.py :: Orchestrator._run(state)           │
+│                                                                 │
+│  ┌── PENDING ──────────────────────────────────────────────┐   │
+│  │  state.status = PLANNING                                │   │
+│  │  planner.plan(state)  ──►  app/orchestrator/planner.py  │   │
+│  │    1. llm_json_call(PLANNING_PROMPT)                    │   │
+│  │       ──►  app/services/llm_service.py                  │   │
+│  │    2. fallback: _make_rule_based_plan()                 │   │
+│  │       → 按 request_type 生成 SubTask 列表               │   │
+│  │  state.status = WAITING                                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌── WAITING ──────────────────────────────────────────────┐   │
+│  │  dispatcher.dispatch_all_pending(state)                  │   │
+│  │  ──►  app/orchestrator/dispatcher.py                     │   │
+│  │                                                          │   │
+│  │  for each PENDING task (依赖已满足):                     │   │
+│  │    _resolve_task_inputs(task, state)                     │   │
+│  │      → 解析 article_task_id 跨任务引用                   │   │
+│  │    _build_memory_context(state):                         │   │
+│  │      → WorkingMemory.get_or_create()                     │   │
+│  │        ──►  app/models/working_memory.py                 │   │
+│  │        └─ 读 data/working/sessions/{user_id}/{sid}.json  │   │
+│  │      → LongTermMemory(user_id)                           │   │
+│  │        ──►  app/models/long_term_memory.py               │   │
+│  │        └─ 读 data/long_term/{user_id}/*.json             │   │
+│  │      → get_corpus_repo()                                 │   │
+│  │        ──►  app/tools/corpus_repo.py                     │   │
+│  │    agent.execute(task.input, context, state):            │   │
+│  │      ┌── diagnosis_expert ──────────────────────────┐   │   │
+│  │      │  ──►  app/sub_agents/diagnosis.py             │   │
+│  │      │  _analyze_error() → llm_json_call()           │   │
+│  │      │  → WorkingMemory.add_agent_information()      │   │
+│  │      │  _generate_similar() → llm_json_call()        │   │
+│  │      │  → WorkingMemory.add_agent_information()      │   │
+│  │      └──────────────────────────────────────────────┘   │   │
+│  │      ┌── corpus_expert ─────────────────────────────┐   │   │
+│  │      │  ──►  app/sub_agents/corpus.py                │   │
+│  │      │  规划模式: llm → training_plan + new_sub_tasks │   │
+│  │      │  普通/风格化: llm → article → WorkingMemory   │   │
+│  │      └──────────────────────────────────────────────┘   │   │
+│  │      ┌── question_expert ───────────────────────────┐   │   │
+│  │      │  ──►  app/sub_agents/question.py              │   │
+│  │      │  llm → questions 数组                         │   │
+│  │      └──────────────────────────────────────────────┘   │   │
+│  │      ┌── qa_expert ─────────────────────────────────┐   │   │
+│  │      │  ──►  app/sub_agents/qa.py                    │   │
+│  │      │  word → dictionary.py + llm                   │   │
+│  │      │  free → LangChain 工具调用循环                 │   │
+│  │      └──────────────────────────────────────────────┘   │   │
+│  │                                                          │   │
+│  │  verifier.verify(state, completed_task)                  │   │
+│  │  ──►  app/orchestrator/verifier.py                       │   │
+│  │    → llm_json_call(VERIFICATION_PROMPT)                  │   │
+│  │    → passed=true: state.completed_results[id] = result   │   │
+│  │    → passed=false: RETRY or FAILED                       │   │
+│  │                                                          │   │
+│  │  _inject_new_tasks(state, completed_task)                │   │
+│  │    → 追加 new_sub_tasks 到 state.sub_tasks               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌── COMPLETED / FAILED ───────────────────────────────────┐   │
+│  │  _finalize(state)                                        │   │
+│  │    _assemble_result() → { request_id, status, results }  │   │
+│  │    checkpoint.save_result(request_id, user_id, result)   │   │
+│  │      └─ 写 data/users/{user_id}/results/{request_id}.json│   │
+│  │    checkpoint.delete(request_id)                         │   │
+│  │      └─ 删 data/users/{user_id}/checkpoints/...         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+CLIENT (轮询)
+  │
+  │  GET /api/result/{request_id}
+  │
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ app/api/routes/results.py :: get_result()                       │
+│  1. get_current_user() → JWT 验证                               │
+│  2. lookup_user_id(request_id) → 所有权校验                     │
+│  3. load_result() → 读缓存结果（若已完成）                      │
+│  4. load() → 读 checkpoint（若仍处理中）                        │
+│  → 返回 { status: processing | completed | failed, ... }        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 13.11 数据流总结
+
+```
+POST 请求 JSON
+  └─ Pydantic AttemptRequest 验证
+      └─ model_dump() → original_request dict
+          └─ OrchestratorState（PENDING）
+              └─ Planner → SubTask 列表
+                  └─ Dispatcher：
+                      ├─ 加载 WorkingMemory（会话记忆）
+                      ├─ 加载 LongTermMemory（用户历史）
+                      ├─ 加载 CorpusRepo（语料库）
+                      └─ SubAgent.execute() → result dict
+                          └─ Verifier 验收
+                              └─ state.completed_results[task_id] = result
+                                  └─ _assemble_result()
+                                      └─ { request_id, status, results:{task_id: result,...} }
+                                          └─ 写入 data/users/.../results/...json
+                                              └─ GET /api/result 返回给客户端
+```
+
+---
+
+### 13.12 已知问题与注意事项
+
+| 问题 | 位置 | 说明 |
+|------|------|------|
+| 无用 import | `attempts.py` line 6 | `from pip._internal.network import session` 为无效导入，不影响功能但需清理 |
+| pydantic.json 用法 | `diagnosis.py` line 10 | `from pydantic import json` 在 Pydantic v2 中已弃用，应改用 `import json` |
+| session_id 非必填 | `AttemptRequest` | `session_id` 声明为 `str`（无默认值）但实际路由层处理 `attempt.session_id or ...`，前端建议始终传值 |
+| LLM 降级无告警 | `verifier.py` | LLM 调用失败时默认 passed=true，静默通过，可能导致低质量结果流出 |
+| Checkpoint 泄漏 | `checkpoint.py` | `data/request_index/` 的索引文件在 `delete()` 后不会删除，仅 checkpoint JSON 被删除 |
