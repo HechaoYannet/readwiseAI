@@ -164,6 +164,7 @@ class Orchestrator:
     def _assemble_result(self, state: OrchestratorState) -> dict:
         return {
             "request_id": state.request_id,
+            "session_id": state.session_id,
             "status": state.status,
             "results": state.completed_results,
             "error_log": state.error_log,

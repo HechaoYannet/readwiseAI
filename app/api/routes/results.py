@@ -49,6 +49,7 @@ async def get_result(
             "session_id": state.session_id,
             "status": "completed",
             "results": state.completed_results,
+            "error_log": state.error_log,
         }
         checkpoint_manager.save_result(request_id, user_id, result)
         checkpoint_manager.delete(request_id)
