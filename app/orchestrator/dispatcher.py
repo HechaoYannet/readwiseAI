@@ -125,6 +125,17 @@ class Dispatcher:
         _resolve_task_inputs(task, state)
 
         task.status = SubTaskStatus.RUNNING
+        # Set LLM logger context so llm_json_call can emit structured logs.
+        try:
+            from app.services import llm_logger
+            llm_logger.set_context(
+                request_id=state.request_id,
+                agent_name=task.assigned_to,
+                task_id=task.sub_task_id,
+            )
+        except Exception:  # pragma: no cover
+            pass
+
         try:
             context: Dict[str, Any] = {
                 "user_id": state.user_id,

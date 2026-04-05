@@ -160,6 +160,16 @@ class Orchestrator:
         logger.info(
             "Request %s finalized with status %s", state.request_id, state.status
         )
+        # Write request-end entry to LLM audit log.
+        try:
+            from app.services import llm_logger
+            llm_logger.log_request_end(
+                request_id=state.request_id,
+                status=str(state.status),
+                error_log=state.error_log,
+            )
+        except Exception:  # pragma: no cover
+            pass
 
     def _assemble_result(self, state: OrchestratorState) -> dict:
         return {
