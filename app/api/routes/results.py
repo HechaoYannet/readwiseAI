@@ -14,8 +14,8 @@ router = APIRouter()
 
 @router.get("/result/{request_id}")
 async def get_result(
-    request_id: str,
-    token_data: TokenData = Depends(get_current_user),
+        request_id: str,
+        token_data: TokenData = Depends(get_current_user),
 ):
     """Poll for the result of a previously submitted request.
 
@@ -46,6 +46,7 @@ async def get_result(
     if state.status == RequestStatus.COMPLETED:
         result = {
             "request_id": request_id,
+            "session_id": state.session_id,
             "status": "completed",
             "results": state.completed_results,
         }
