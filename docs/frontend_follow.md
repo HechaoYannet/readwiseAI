@@ -267,6 +267,7 @@ Authorization: Bearer <access_token>
 // 完成（always 包含 error_log，成功时为空数组）
 {
   "request_id": "req_...",
+  "session_id": "session_...",
   "status": "completed",
   "results": {
     "sub_001": {
@@ -929,6 +930,7 @@ uvicorn app.main:app --reload --port 8000
 ```json
 {
   "request_id": "req_a3f7c9b12d4e",
+  "session_id": "session_...",
   "status": "completed",
   "results": { /* 见下方各 request_type 的 results 结构 */ },
   "error_log": []

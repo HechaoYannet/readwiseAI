@@ -546,7 +546,7 @@ WAITING:
   → 所有任务完成: COMPLETED / FAILED
 
 → _finalize(state):
-    _assemble_result() → {request_id, status, results, error_log}
+    _assemble_result() → {request_id, session_id, status, results, error_log}
     checkpoint.save_result() → data/users/{user_id}/results/{request_id}.json
     checkpoint.delete()      → 清理 checkpoints 文件
 ```
@@ -576,6 +576,7 @@ WAITING:
 // 完成（error_log 始终存在，成功时为 []）
 {
   "request_id": "req_...",
+  "session_id": "session_...",
   "status": "completed",
   "results": { /* 见下方 */ },
   "error_log": []
