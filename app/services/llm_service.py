@@ -77,20 +77,48 @@ async def llm_json_call(prompt: str) -> Dict[str, Any]:
     """Call LLM and parse the response as JSON.
 
     Returns an empty dict on parse failure so callers can handle gracefully.
+    Automatically writes a structured Markdown log entry via llm_logger when
+    a request context is active (request_id set via contextvars).
     """
+    import time as _time
+    from app.services import llm_logger
+
     llm = get_llm()
+    raw_content = ""
+    parsed: Dict[str, Any] = {}
+    error_msg = ""
+    success = False
+    t0 = _time.monotonic()
+
     try:
         response = await llm.ainvoke(prompt)
-        content = response.content if hasattr(response, "content") else str(response)
+        raw_content = response.content if hasattr(response, "content") else str(response)
         # Strip Markdown code fences if present
-        content = content.strip()
+        content = raw_content.strip()
         if content.startswith("```"):
             lines = content.splitlines()
             content = "\n".join(lines[1:-1]) if len(lines) > 2 else content
-        return json.loads(content)
+        parsed = json.loads(content)
+        success = True
+        return parsed
     except json.JSONDecodeError as exc:
+        error_msg = f"JSON parse error: {exc}"
         logger.error("LLM response is not valid JSON: %s", exc)
         return {}
     except Exception as exc:
+        error_msg = str(exc)
         logger.error("LLM call failed: %s", exc)
         return {}
+    finally:
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        try:
+            llm_logger.log_llm_call(
+                prompt=prompt,
+                raw_response=raw_content,
+                parsed=parsed,
+                latency_ms=latency_ms,
+                success=success,
+                error=error_msg,
+            )
+        except Exception as log_exc:  # pragma: no cover
+            logger.warning("LLM logger error: %s", log_exc)
