@@ -19,9 +19,9 @@ _context: Dict[str, Any] = {}
 
 
 def configure_tools(
-    working_memory: Optional[Any] = None,
-    long_term_memory: Optional[Any] = None,
-    corpus_repo: Optional[Any] = None,
+        working_memory: Optional[Any] = None,
+        long_term_memory: Optional[Any] = None,
+        corpus_repo: Optional[Any] = None,
 ) -> None:
     """Inject runtime dependencies into the tool module.
 
@@ -166,20 +166,23 @@ def lookup_word(word: str, context_sentence: str = "") -> str:
     # Use a synchronous stub path when no API key is configured (test/offline mode)
     # and the real async call when running inside an event loop via a thread pool.
     try:
-        from app.tools.dictionary import _stub_definition, _APP_KEY, _APP_SECRET
+        from app.tools.dictionary import APP_KEY, APP_SECRET
 
-        if not _APP_KEY or not _APP_SECRET:
-            result = _stub_definition(word)
+        if not APP_KEY or not APP_SECRET:
+            result = {
+                "translation": [f"[模拟] {word}: 请配置 API 密钥"],
+                "success": False
+            }
         else:
             import asyncio
             from app.tools.dictionary import lookup_word as _dict_lookup
             result = asyncio.run(_dict_lookup(word))
 
-        defs = result.get("definitions", [])
-        phonetic = result.get("phonetic", "")
+        defs = result.get("translation", [])
+        # phonetic = result.get("phonetic", "")
         output = f"**{word}**"
-        if phonetic:
-            output += f" /{phonetic}/"
+        # if phonetic:
+        #     output += f" /{phonetic}/"
         output += "\n" + "\n".join(f"  - {d}" for d in defs)
         if context_sentence:
             output += f"\n\n（上下文：{context_sentence}）"
