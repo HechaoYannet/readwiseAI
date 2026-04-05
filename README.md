@@ -1,675 +1,455 @@
 # ReadWise AI
 
-ReadWise AI 是一个基于 FastAPI 构建的智能英语学习系统，采用多 Agent 架构，为中国高考英语备考提供智能诊断、内容生成和问答支持。
+> 基于 FastAPI + 多 Agent 架构的智能高考英语学习系统
+
+ReadWise AI 通过 AI 驱动的多个专家 Sub-Agent，为高中生提供**错题诊断、文章生成、题目生成、问答辅导、遗忘曲线复习**等全流程智能备考服务。
 
 ---
 
 ## 目录
 
-- [项目简介](#项目简介)
-- [项目结构](#项目结构)
-- [API 接口文档](#api-接口文档)
-  - [认证接口](#认证接口)
-  - [用户信息接口](#用户信息接口)
-  - [POST /api/attempt — 提交请求](#post-apiattempt--提交请求)
-  - [GET /api/result/{request_id} — 查询结果](#get-apiresultrequest_id--查询结果)
-  - [POST /internal/callback/{request_id} — 内部回调](#post-internalcallbackrequest_id--内部回调)
-- [记忆管理模块](#记忆管理模块)
-- [语料专家升级说明](#语料专家升级说明)
-- [管理员命令行工具](#管理员命令行工具)
-- [外部 API 调用分析](#外部-api-调用分析)
-  - [LLM API（OpenAI / DeepSeek）](#llm-apiopenai--deepseek)
-  - [有道词典 API](#有道词典-api)
-- [请求处理流程](#请求处理流程)
-- [Sub-Agent 说明](#sub-agent-说明)
-- [配置与环境变量](#配置与环境变量)
-- [快速开始](#快速开始)
+1. [核心功能](#1-核心功能)
+2. [系统架构](#2-系统架构)
+3. [项目结构](#3-项目结构)
+4. [快速开始](#4-快速开始)
+5. [API 总览](#5-api-总览)
+   - [认证 API](#51-认证-api)
+   - [用户 API](#52-用户-api)
+   - [答题 API](#53-答题-api)
+   - [长期记忆 API](#54-长期记忆-api)
+   - [会话 API](#55-会话-api)
+   - [内部 API](#56-内部-api)
+6. [request_type 说明](#6-request_type-说明)
+7. [Sub-Agent 说明](#7-sub-agent-说明)
+8. [记忆系统设计](#8-记忆系统设计)
+9. [管理员 CLI](#9-管理员-cli)
+10. [外部依赖](#10-外部依赖)
+11. [配置与环境变量](#11-配置与环境变量)
+12. [测试](#12-测试)
 
 ---
 
-## 项目简介
+## 1. 核心功能
 
-**ReadWise AI** 的核心功能：
-
-- **错误诊断**：分析学生英语阅读理解的错误，生成相似练习题。
-- **语料生成**：按难度（L1–L4）和体裁（议论文/说明文/记叙文）生成高质量英文文章；支持以真题为风格参考的风格化生成。
-- **完整题组生成（方案一）**：主控 LLM 通过 LangChain 工具调用语料专家和出题专家，动态注入子任务，灵活生成包含 4 篇文章+配套题目的完整训练题组。
-- **题目生成**：根据文章生成高考风格选择题及解析。
-- **智能问答**：支持单词查询、句子解析、语法讲解和翻译，通过 LangChain 工具自主访问记忆。
-- **用户管理**：基于邀请码的注册系统，JWT 身份认证，用户名+密码登录，密码修改，用户信息管理。
-- **记忆管理**：按用户隔离的工作记忆（会话级）和长期记忆（错题本、遗忘曲线）；语料专家生成文章后自动同步到工作记忆。
+| 功能 | 说明 |
+|------|------|
+| **错题诊断** | 分析学生答题错误的根本原因，给出证据句、建议和同类题 |
+| **文章生成** | 按难度 L1–L4 × 体裁（议论/说明/记叙）生成高考风格英文文章 |
+| **完整训练题组** | 主控 LLM 规划 4 篇文章方案 → 动态注入子任务 → 生成文章+题目全套 |
+| **题目生成** | 为指定文章生成细节题/推理题/词义题/主旨题，含答案解析 |
+| **智能问答** | 查词、长难句拆解、语法解释、翻译，支持 LangChain 工具调用访问记忆 |
+| **错题本** | 持久化存储所有错题，支持关键词/题型/难度筛选 |
+| **遗忘曲线** | SM-2 间隔重复算法，自动调度下次复习时间 |
+| **训练记录** | 记录每次学习的文章数、正确率、用时、得分等 |
+| **战力值历史** | 跟踪学生综合学习能力评分曲线 |
+| **用户管理** | 邀请码注册、JWT 认证、密码修改、用户信息管理 |
 
 ---
 
-## 项目结构
+## 2. 系统架构
+
+```
+用户请求
+   │
+   ▼
+POST /api/attempt（异步）
+   │
+   ▼
+Orchestrator（主控循环）
+   ├── Planner：LLM 任务分解 → 生成 SubTask 列表
+   ├── Dispatcher：按依赖顺序分发任务，注入记忆上下文
+   │       ├── diagnosis_expert  → 错因分析 + 同类题生成
+   │       ├── corpus_expert     → 文章生成（普通/规划/风格化）
+   │       ├── question_expert   → 题目生成
+   │       └── qa_expert         → 问答（LangChain 工具调用）
+   └── Verifier：验证结果 → 通过则完成，失败则 Replan
+
+GET /api/result/{request_id}  （轮询结果）
+```
+
+**记忆层（每次请求前 Dispatcher 自动注入）：**
+
+```
+WorkingMemory         ← 会话级（文章、题目、对话）
+LongTermMemory        ← 用户级（错题本、遗忘曲线、训练记录、战力值）
+CorpusRepo            ← 语料库（真题文章索引）
+```
+
+---
+
+## 3. 项目结构
 
 ```
 readwiseAI/
 ├── app/
-│   ├── main.py                    # FastAPI 应用入口（v0.2.0）
-│   ├── auth/                      # 认证模块
-│   │   ├── __init__.py
-│   │   ├── jwt_handler.py         # JWT 生成/验证（PyJWT，7天有效期）
-│   │   ├── dependencies.py        # FastAPI 依赖注入（get_current_user）
-│   │   ├── models.py              # 认证请求/响应 Pydantic 模型
-│   │   └── password.py            # bcrypt 密码哈希与验证
+│   ├── main.py                    # FastAPI 入口 (v0.2.0)
+│   ├── auth/
+│   │   ├── jwt_handler.py         # JWT 生成/验证（7天有效期）
+│   │   ├── dependencies.py        # get_current_user / get_admin_user
+│   │   ├── models.py              # 请求/响应 Pydantic 模型
+│   │   └── password.py            # bcrypt 密码哈希
 │   ├── api/routes/
-│   │   ├── auth.py                # POST /api/auth/*（注册/登录/登出/刷新）
-│   │   ├── users.py               # GET/PUT /api/users/*（用户信息）
+│   │   ├── auth.py                # /api/auth/* 认证接口
+│   │   ├── users.py               # /api/users/* 用户接口
 │   │   ├── attempts.py            # POST /api/attempt
-│   │   ├── results.py             # GET  /api/result/{request_id}
-│   │   └── callback.py            # POST /internal/callback/{request_id}
+│   │   ├── results.py             # GET  /api/result/{id}
+│   │   ├── memory.py              # /api/memory/* 长期记忆接口
+│   │   ├── sessions.py            # /api/sessions/* 工作记忆接口
+│   │   └── callback.py            # POST /internal/callback/{id}
 │   ├── models/
-│   │   ├── state.py               # Orchestrator 状态定义
-│   │   ├── user.py                # User 数据模型 + UserStore（JSON文件存储）含 password_hash 字段
-│   │   ├── invite.py              # InviteCode 数据模型 + InviteStore
-│   │   ├── working_memory.py      # 会话级工作记忆（按 user_id/session_id 隔离）
-│   │   ├── long_term_memory.py    # 用户长期记忆（错题、遗忘曲线、战力值）
-│   │   ├── mistakes.py            # 错题本（MistakeEntry + MistakeBook）
-│   │   └── forgetting.py         # SM-2 遗忘曲线算法
+│   │   ├── state.py               # OrchestratorState / SubTask / AttemptRequest
+│   │   ├── user.py                # User + UserStore（JSON 文件存储）
+│   │   ├── invite.py              # InviteCode + InviteStore
+│   │   ├── working_memory.py      # WorkingMemory（会话级）
+│   │   ├── long_term_memory.py    # LongTermMemory 聚合类
+│   │   ├── mistakes.py            # MistakeEntry + MistakeBook
+│   │   └── forgetting.py          # SM2Item + ForgettingCurve
 │   ├── orchestrator/
-│   │   ├── agent.py               # Orchestrator 主控循环（含动态子任务注入）
-│   │   ├── planner.py             # 任务分解（Planner，支持 training_set 总体规划）
-│   │   ├── verifier.py            # 结果验证（Verifier）
-│   │   ├── dispatcher.py          # 任务分发（注入工作记忆+长期记忆+语料库；跨任务输入解析）
-│   │   └── checkpoint.py          # 状态持久化（按用户隔离到 data/users/{user_id}/）
+│   │   ├── agent.py               # Orchestrator 主控循环 + 动态子任务注入
+│   │   ├── planner.py             # Planner（LLM分解 + 规则fallback）
+│   │   ├── verifier.py            # Verifier（结果验证）
+│   │   ├── dispatcher.py          # Dispatcher（记忆注入 + 跨任务引用解析）
+│   │   └── checkpoint.py          # 状态持久化（按用户隔离）
 │   ├── services/
-│   │   ├── llm_service.py         # LLM 调用封装
-│   │   └── user_service.py        # 用户服务层（注册、登录、密码修改、CRUD、邀请码管理）
+│   │   ├── llm_service.py         # LLM 调用封装（OpenAI/DeepSeek）
+│   │   └── user_service.py        # 用户业务逻辑层
 │   ├── sub_agents/
-│   │   ├── base.py                # BaseSubAgent 抽象类（含 load_prompt()）
-│   │   ├── diagnosis.py           # 错误诊断 Agent
-│   │   ├── corpus.py              # 语料生成 Agent（普通/总体规划/风格化；工作记忆同步）
-│   │   ├── question.py            # 题目生成 Agent（支持连续出题）
-│   │   └── qa.py                  # 问答 Agent（LangChain 工具调用）
+│   │   ├── base.py                # BaseSubAgent（含 load_prompt / _call_llm）
+│   │   ├── diagnosis.py           # 错因分析 + 同类题生成
+│   │   ├── corpus.py              # 文章生成（普通/规划/风格化）
+│   │   ├── question.py            # 题目生成
+│   │   └── qa.py                  # 问答（LangChain 工具调用）
 │   └── tools/
-│       ├── dictionary.py          # 有道词典 API 封装
+│       ├── dictionary.py          # 有道词典 API
 │       ├── grammar.py             # 语法规则库
-│       ├── vocabulary.py          # 词汇等级检查
-│       ├── constraints.py         # 难度约束规则
+│       ├── vocabulary.py          # 词汇等级
+│       ├── constraints.py         # 难度约束
 │       ├── corpus_repo.py         # 语料库检索
-│       └── memory_tools.py        # LangChain 记忆工具集（6个@tool函数）
-├── admin_cli/                     # 管理员 CLI 模块
-│   ├── __init__.py
-│   ├── utils.py                   # 工具函数（表格输出、确认提示）
+│       └── memory_tools.py        # LangChain @tool 集（6个工具）
+├── admin_cli/                     # 管理员 CLI
 │   └── commands/
-│       ├── invite.py              # 邀请码管理命令
-│       ├── user.py                # 用户管理命令
-│       ├── memory.py              # 记忆管理命令
-│       └── system.py              # 系统统计/备份/健康检查
-├── admin.py                       # 管理员 CLI 入口
-├── tests/
-│   ├── test_agent.py              # Agent 集成测试
-│   ├── test_memory.py             # 记忆模块测试
-│   ├── test_auth.py               # 认证模块测试
-│   ├── test_user_service.py       # 用户服务测试
-│   └── test_admin_cli.py          # 管理员 CLI 测试
+│       ├── invite.py              # 邀请码管理
+│       ├── user.py                # 用户管理
+│       ├── memory.py              # 记忆管理
+│       └── system.py              # 系统状态/备份/健康检查
+├── admin.py                       # CLI 入口
+├── tests/                         # 测试（pytest）
 ├── data/
-│   ├── prompts/                   # Sub-agent 提示词（.txt，热更新）
+│   ├── prompts/                   # Sub-agent 提示词文件（.txt，热更新）
 │   ├── corpus/                    # 语料库（文章 + index.json）
-│   ├── working/sessions/{user_id}/# 工作记忆（按用户隔离）
-│   ├── long_term/{user_id}/       # 长期记忆（按用户隔离）
-│   ├── users/                     # 用户数据（users.json + 按用户隔离的存档）
-│   │   ├── users.json
-│   │   └── {user_id}/
-│   │       ├── checkpoints/       # 请求状态存档（按用户隔离）
-│   │       └── results/           # 请求结果存档（按用户隔离）
-│   ├── request_index/             # request_id → user_id 映射（权限校验用）
-│   ├── invites/invites.json       # 邀请码数据
+│   ├── working/sessions/{user_id}/ # 工作记忆（按用户隔离）
+│   ├── long_term/{user_id}/        # 长期记忆（按用户隔离）
+│   │   ├── mistakes.json           # 错题本
+│   │   ├── forgetting.json         # SM-2 遗忘曲线状态
+│   │   ├── training.json           # 训练记录
+│   │   └── power_history.json      # 战力值历史
+│   ├── users/users.json            # 用户数据
+│   ├── invites/invites.json        # 邀请码
+│   └── request_index/              # request_id → user_id 映射
+├── docs/
+│   └── frontend_follow.md         # 前端开发文档（含所有 API 详情）
 ├── requirements.txt
-├── pytest.ini
-├── UserDesign.md                  # 用户与记忆管理模块构建任务书
-├── MemoryDesign.md                # 记忆管理模块构建任务书
-└── DesignRoof.md
+└── pytest.ini
 ```
 
 ---
 
-## API 接口文档
+## 4. 快速开始
 
-### 认证接口
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
 
-#### POST /api/auth/verify-invite — 验证邀请码
+# 2. 配置环境变量（开发时可跳过，使用默认值）
+export JWT_SECRET_KEY="your-strong-secret-key"   # 生产必须设置
+export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1"  # 可选，支持代理
 
-**认证：** 无
+# 3. 创建管理员邀请码
+python admin.py invite create --max-uses 10
 
-```json
-// 请求
-{ "invite_code": "ABC12345" }
-
-// 响应
-{ "valid": true, "message": "邀请码有效" }
+# 4. 启动服务
+uvicorn app.main:app --reload --port 8000
 ```
 
-#### POST /api/auth/register — 注册
-
-**认证：** 无  
-**说明：** 必须先持有有效邀请码，注册成功后返回 JWT Token。
-
-```json
-// 请求
-{
-    "invite_code": "ABC12345",
-    "username": "张三",
-    "password": "password123",
-    "confirm_password": "password123",
-    "exam_region": "全国I卷",
-    "grade": "高三",
-    "school": "示范高中"
-}
-
-// 响应 (201)
-{
-    "user_id": "uuid-xxxx",
-    "username": "张三",
-    "access_token": "eyJ...",
-    "token_type": "bearer"
-}
-```
-
-**密码规则：** 8–20 位，两次输入须一致。
-
-#### POST /api/auth/login — 登录
-
-**认证：** 无  
-**说明：** 使用用户名（或手机号/邮箱）与密码登录，返回 JWT Token。
-
-```json
-// 请求
-{
-    "login_id": "张三",
-    "password": "password123"
-}
-
-// 响应 (200)
-{
-    "user_id": "uuid-xxxx",
-    "username": "张三",
-    "access_token": "eyJ...",
-    "token_type": "bearer"
-}
-```
-
-#### POST /api/auth/logout — 登出
-
-**认证：** 无（客户端清除 Token 即可）
-
-#### POST /api/auth/refresh — 刷新 Token
-
-**认证：** ✅ Bearer Token
-
-```json
-// 响应
-{ "access_token": "eyJ...", "token_type": "bearer" }
-```
+**访问 API 文档：**
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ---
 
-### 用户信息接口
+## 5. API 总览
 
-所有接口需要在 Header 中携带：`Authorization: Bearer <token>`
+> 🔐 = 需要 Bearer JWT Token（`Authorization: Bearer <token>`）
 
-#### GET /api/users/me — 获取当前用户信息
+### 5.1 认证 API
 
-```json
-{
-    "id": "uuid-xxxx",
-    "username": "张三",
-    "exam_region": "全国I卷",
-    "grade": "高三",
-    "school": "示范高中",
-    "role": "user",
-    "status": "active",
-    "created_at": "2024-04-04T00:00:00",
-    "last_login_at": "2024-04-04T12:00:00"
-}
-```
-
-#### PUT /api/users/me — 更新用户信息
-
-可修改字段：`username`、`exam_region`、`grade`、`school`
-
-#### PUT /api/users/password — 修改密码
-
-**认证：** ✅ Bearer Token
-
-```json
-// 请求
-{
-    "old_password": "oldPass12",
-    "new_password": "newPass12",
-    "confirm_password": "newPass12"
-}
-
-// 响应
-{ "message": "密码修改成功，请重新登录" }
-```
-
-#### GET /api/users/stats — 获取用户统计
-
-```json
-{
-    "user_id": "uuid-xxxx",
-    "mistake_count": 15,
-    "due_for_review": 3,
-    "latest_power": 85.5,
-    "power_records": 12
-}
-```
-
----
-
-### POST /api/attempt — 提交请求
-
-提交用户的学习请求，支持四种类型：错误诊断（`attempt`）、语料生成（`corpus`）、题目生成（`question`）、智能问答（`qa`）。
-
-**请求方式：** `POST`  
-**路径：** `/api/attempt`  
-**认证：** ✅ Bearer Token（JWT）  
-**处理方式：** 异步（后台任务）
-
-#### 请求体（JSON）
-
-| 字段 | 类型 | 必填 | 说明 |
+| 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
-| `request_type` | string | ✅ | `attempt` / `corpus` / `question` / `qa` / `training_set` |
-| `paragraph` | string | attempt | 阅读文段 |
-| `question_text` | string | attempt | 题目内容 |
-| `options` | object | attempt | 选项 `{"A": ..., "B": ..., "C": ..., "D": ...}` |
-| `user_answer` | string | attempt | 学生作答 |
-| `correct_answer` | string | attempt | 正确答案 |
-| `time_spent` | int | attempt | 答题用时（秒） |
-| `difficulty` | string | corpus/question | 难度等级 `L1` / `L2` / `L3` / `L4` |
-| `genre` | string | corpus | 文章体裁 `argumentative` / `expository` / `narrative` |
-| `topic` | string | corpus | 文章主题 |
-| `word_count` | int | corpus | 目标字数 |
-| `article` | string | question | 用于出题的完整文章 |
-| `question_types` | array | question | 题型列表 `["detail", "inference", "vocabulary", "main_idea"]` |
-| `count` | int | question | 生成题目数量 |
-| `query_type` | string | qa | `word` / `sentence` / `grammar` / `translate` / `free` |
-| `content` | string | qa | 查询内容 |
-| `context_sentence` | string | qa（word） | 单词所在句子上下文 |
-| `session_id` | string | ✅ | 会话 ID（用于工作记忆） |
-| `reference_id` | string | corpus | 参考真题的语料库 ID（风格化生成） |
-| `user_level` | string | training_set | 用户整体水平提示（L1–L4），用于总体规划 |
+| POST | `/api/auth/verify-invite` | 无 | 验证邀请码有效性 |
+| POST | `/api/auth/register` | 无 | 用邀请码注册，返回 Token |
+| POST | `/api/auth/login` | 无 | 用户名/手机/邮箱 + 密码登录 |
+| POST | `/api/auth/logout` | 无 | 登出（客户端清除 Token） |
+| POST | `/api/auth/refresh` | 🔐 | 刷新 Token（有效期内可刷新） |
 
-> **注意**：`user_id` 不再作为请求体字段传入，而是从 JWT Token 中自动提取。
+### 5.2 用户 API
 
-#### 响应示例
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET  | `/api/users/me` | 🔐 | 获取当前用户信息 |
+| PUT  | `/api/users/me` | 🔐 | 更新用户名/地区/年级/学校 |
+| PUT  | `/api/users/password` | 🔐 | 修改密码 |
+| GET  | `/api/users/stats` | 🔐 | 获取统计（错题数、战力值等） |
 
-```json
-{
-    "request_id": "req_xxxxxxxxxxxxxx",
-    "status": "processing",
-    "result_url": "/api/result/req_xxxxxxxxxxxxxx"
-}
-```
+### 5.3 答题 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| POST | `/api/attempt` | 🔐 | 提交请求（异步），返回 request_id |
+| GET  | `/api/result/{request_id}` | 🔐 | 轮询处理结果 |
+
+### 5.4 长期记忆 API
+
+#### 训练记录
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET  | `/api/memory/training` | 🔐 | 获取训练记录列表 |
+| POST | `/api/memory/training` | 🔐 | 添加训练记录 |
+
+#### 错题本
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET  | `/api/memory/mistakes` | 🔐 | 获取错题列表（支持筛选） |
+| GET  | `/api/memory/mistakes/due` | 🔐 | 获取待复习错题 |
+| GET  | `/api/memory/mistakes/{id}` | 🔐 | 获取单条错题详情 |
+| POST | `/api/memory/mistakes` | 🔐 | 添加错题 |
+| PUT  | `/api/memory/mistakes/{id}` | 🔐 | 更新错题字段 |
+| DELETE | `/api/memory/mistakes/{id}` | 🔐 | 删除错题 |
+
+#### 遗忘曲线（SM-2）
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET  | `/api/memory/curve` | 🔐 | 获取遗忘曲线概况 |
+| GET  | `/api/memory/curve/due` | 🔐 | 获取待复习条目 |
+| GET  | `/api/memory/curve/{item_id}` | 🔐 | 获取单条 SM-2 状态 |
+| POST | `/api/memory/curve/{item_id}/review` | 🔐 | 提交复习质量（0-5） |
+
+#### 战力值历史
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET  | `/api/memory/power` | 🔐 | 获取战力值历史 |
+| POST | `/api/memory/power` | 🔐 | 添加战力值记录 |
+
+### 5.5 会话 API
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| GET  | `/api/sessions` | 🔐 | 获取会话 ID 列表 |
+| GET  | `/api/sessions/current` | 🔐 | 获取最近一次会话 |
+| GET  | `/api/sessions/{id}` | 🔐 | 获取会话完整数据 |
+| GET  | `/api/sessions/{id}/articles` | 🔐 | 获取会话中的文章 |
+| GET  | `/api/sessions/{id}/questions` | 🔐 | 获取会话中的题目 |
+| GET  | `/api/sessions/{id}/history` | 🔐 | 获取对话历史 |
+| GET  | `/api/sessions/{id}/agent-info` | 🔐 | 获取 Agent 运行信息 |
+| DELETE | `/api/sessions/{id}` | 🔐 | 删除会话 |
+
+### 5.6 内部 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/internal/callback/{request_id}` | Sub-agent 完成回调（内部使用） |
 
 ---
 
-### GET /api/result/{request_id} — 查询结果
+## 6. request_type 说明
 
-轮询获取请求的处理状态和结果。
+`POST /api/attempt` 的 `request_type` 字段决定 AI 执行何种任务：
 
-**请求方式：** `GET`  
-**路径：** `/api/result/{request_id}`  
-**认证：** ✅ Bearer Token（JWT）  
+| request_type | 功能 | 主要输入字段 |
+|-------------|------|------------|
+| `attempt` | 错题诊断 + 同类题 | `paragraph`, `question_text`, `options`, `user_answer`, `correct_answer`, `time_spent` |
+| `corpus` | 生成单篇文章 | `difficulty`(L1-L4), `genre`, `topic`, `word_count`, `reference_id` |
+| `question` | 为文章出题 | `article`, `question_types`, `difficulty`, `count` |
+| `qa` | 问答辅导 | `query_type`(word/sentence/grammar/translate/free), `content`, `context_sentence` |
+| `training_set` | 完整训练题组（4篇文章+题目） | `user_level` |
 
-> **权限校验**：只有提交该请求的用户才能查询结果。其他用户返回 `403 Forbidden`；不存在的 `request_id` 返回 `{"status": "not_found"}`（不暴露是否存在）。
+**示例 – 提交错题分析：**
 
-**完成响应：**
 ```json
+POST /api/attempt
 {
-    "request_id": "req_xxxxxxxxxxxxxx",
-    "status": "completed",
-    "results": {
-        "sub_001": { ... }
-    }
+  "request_type": "attempt",
+  "session_id": "session_001",
+  "paragraph": "Scientists have found that...",
+  "question_text": "What is the main idea of the passage?",
+  "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+  "user_answer": "A",
+  "correct_answer": "C",
+  "time_spent": 45,
+  "question_number": "A1"
 }
 ```
 
----
-
-### POST /internal/callback/{request_id} — 内部回调
-
-供 Sub-Agent 在异步完成任务后通知 Orchestrator，**仅供内部使用**。
-
----
-
-## 语料专家升级说明
-
-### 三种工作模式
-
-#### 1. 普通生成模式（默认）
-
-`request_type: "corpus"` — 按指定难度、体裁、主题生成单篇文章。
+**示例 – 生成完整训练题组：**
 
 ```json
-{
-  "request_type": "corpus",
-  "difficulty": "L3",
-  "genre": "argumentative",
-  "topic": "人工智能对教育的影响",
-  "word_count": 320
-}
-```
-
-#### 2. 风格化生成模式（方案一）
-
-传入 `reference_id` 指定语料库中的真题 ID，语料专家将以该真题为风格参考，生成同体裁、相似句式难度的新文章。
-
-```json
-{
-  "request_type": "corpus",
-  "difficulty": "L3",
-  "genre": "argumentative",
-  "topic": "renewable energy",
-  "word_count": 350,
-  "reference_id": "gk_2024_001"
-}
-```
-
-#### 3. 总体规划模式（方案一 · 完整题组）
-
-`request_type: "training_set"` — 主控 LLM 首次调用语料专家时开启规划，语料专家将：
-
-1. 读取整个（或部分）真题语料库索引
-2. 综合用户错题本、战力值历史等辅助信息
-3. 规划本组训练 4 篇文章各自的出题描述（主题、真题参考 ID、参考语法点、难度、字数等）
-4. 返回 `training_plan` 给主控 LLM，并动态注入 4 组（语料+出题）子任务
-
-主控 LLM 通过 LangChain 工具依次调用语料专家和出题专家，形成完整题组。
-
-```json
+POST /api/attempt
 {
   "request_type": "training_set",
+  "session_id": "session_train_001",
   "user_level": "L2"
 }
 ```
 
-**返回结构**（轮询 `/api/result/{request_id}`）：
-
-```json
-{
-  "status": "completed",
-  "results": {
-    "sub_000": { "training_plan": [...], "new_sub_tasks": [...] },
-    "dyn_c1": { "article": { "title": "...", "content": "..." } },
-    "dyn_q1": { "questions": [...] },
-    ...
-  }
-}
-```
-
-### 工作记忆管理
-
-语料专家在每次成功生成文章后，自动将文章保存到当前会话的 **WorkingMemory** (`current_article`)，供出题专家、问答专家在同一会话内直接调用，无需重复传递文章内容。
-
-问答专家（`qa_expert`）通过 `get_current_article` LangChain 工具即可读取当前文章，实现跨子任务的记忆共享。
+> 详细字段说明及所有场景示例参见 [`docs/frontend_follow.md`](docs/frontend_follow.md)。
 
 ---
 
-## 记忆管理模块
+## 7. Sub-Agent 说明
 
-### 存储路径规范
+### DiagnosisExpert（错因分析专家）
 
-```
-data/
-├── prompts/                          # Sub-agent 提示词（热更新）
-│   ├── diagnosis_prompt.txt
-│   ├── corpus_prompt.txt
-│   ├── question_prompt.txt
-│   └── qa_prompt.txt
-├── corpus/                           # 公共语料库
-│   ├── articles/gk_2024_001.md       # 高考真题（Markdown格式）
-│   └── index.json                    # 按难度/体裁索引
-├── working/sessions/{user_id}/       # 工作记忆（按用户隔离）
-│   └── {session_id}.json
-├── long_term/{user_id}/              # 长期记忆（按用户隔离）
-│   ├── mistakes.json                 # 错题本
-│   ├── forgetting.json               # SM-2 遗忘曲线状态
-│   ├── power_history.json            # 战力值历史
-│   └── training.json                 # 训练记录
-├── users/                            # 用户数据
-│   ├── users.json                    # 用户注册记录
-│   └── {user_id}/                    # 按用户隔离的请求存档
-│       ├── checkpoints/              # 进行中的请求状态
-│       └── results/                  # 已完成的请求结果
-├── request_index/                    # request_id → user_id 映射
-└── invites/invites.json              # 邀请码数据
-```
+- **输入**：paragraph、question_text、options、user_answer、correct_answer、time_spent
+- **输出**：error_category（错误类型）、explanation（错因分析）、evidence_sentence（证据句）、suggestion（学习建议）+ similar_question（同类题）
+- **错误类型**：词汇理解 / 推理判断 / 细节查找 / 主旨理解 / 其他
 
-### LangChain 记忆工具（问答专家可调用）
+### CorpusExpert（语料生成专家）
 
-| 工具名 | 功能 | 使用场景 |
-|--------|------|---------|
-| `get_current_article` | 获取当前文章全文 | 学生问"文章里提到..." |
-| `get_current_questions` | 获取当前题目列表 | 学生问"第几题..." |
-| `search_mistakes` | 搜索错题本 | 学生问"我以前错过..." |
-| `search_corpus` | 搜索语料库示例 | 需要真题风格参考时 |
-| `lookup_word` | 查询单词释义 | 学生问某单词意思 |
-| `get_grammar_rule` | 获取语法规则 | 学生问语法点用法 |
+三种工作模式：
+
+1. **普通模式**：按 difficulty/genre/topic 生成文章
+2. **规划模式**（`enable_planning=True`）：读取语料库 + 用户错题/战力值，规划4篇文章方案，自动注入子任务
+3. **风格化模式**（`reference_id` 指定）：以真题为风格参考生成文章
+
+生成文章后自动同步到 WorkingMemory。
+
+### QuestionExpert（出题专家）
+
+- 支持批量出题（一次请求生成多道题）
+- 题型：detail（细节题）/ inference（推理题）/ vocabulary（词义题）/ main_idea（主旨题）
+- 支持跨任务引用：`article_task_id` 自动从 CorpusExpert 结果中读取文章
+
+### QAExpert（问答专家）
+
+- 结构化模式：word / sentence / grammar / translate
+- 自由模式（`free`）：通过 LangChain 工具调用自主访问工作记忆、错题本、语料库
 
 ---
 
-## 管理员命令行工具
+## 8. 记忆系统设计
 
-独立命令行脚本，直接操作数据文件，无需启动 Web 服务。
+### 工作记忆（WorkingMemory）
+
+- 存储位置：`data/working/sessions/{user_id}/{session_id}.json`
+- 会话类型：`training`（学习）/ `chatting`（聊天）
+- 内容：articles（文章列表）、question_queue（题目队列）、conversation_history（对话历史）、agent_information（Agent 运行信息）
+- 每次 Dispatcher 执行任务前自动加载注入
+
+### 长期记忆（LongTermMemory）
+
+存储位置：`data/long_term/{user_id}/`
+
+| 文件 | 内容 |
+|------|------|
+| `mistakes.json` | 错题本（MistakeEntry 数组） |
+| `forgetting.json` | SM-2 遗忘曲线状态（item_id → SM2Item） |
+| `training.json` | 训练记录历史 |
+| `power_history.json` | 战力值历史 |
+
+**SM-2 算法说明：**
+
+quality 0–5 对应复习质量（5=完美，0=完全遗忘），算法自动调整：
+- `easiness`（难度因子，初始 2.5，最小 1.3）
+- `interval_days`（下次复习间隔天数，连续成功后指数增长）
+- `next_review_at`（下次复习时间戳）
+
+### 安全设计
+
+所有用户数据路径经过 `_safe_user_dir()` 验证：
+- user_id 只允许字母数字、连字符、下划线
+- 路径解析后校验在 base_dir 内，防止路径穿越攻击
+
+---
+
+## 9. 管理员 CLI
 
 ```bash
 # 邀请码管理
-python admin.py invite create --max-uses 10 --note "北京内测"
+python admin.py invite create --max-uses 5 --note "测试用"
 python admin.py invite list
-python admin.py invite show ABC12345
-python admin.py invite revoke ABC12345
+python admin.py invite revoke <code>
 
 # 用户管理
-python admin.py user list --status active
-python admin.py user show <user_id>
+python admin.py user list
 python admin.py user disable <user_id>
 python admin.py user enable <user_id>
-python admin.py user update <user_id> --grade 高三 --school 示范中学
-python admin.py user delete <user_id> --force
 
 # 记忆管理
-python admin.py memory list <user_id>
-python admin.py memory export <user_id> --output backup.json
-python admin.py memory import <user_id> --file backup.json
-python admin.py memory clear <user_id> --confirm
+python admin.py memory stats <user_id>
 
-# 系统管理
-python admin.py stats
-python admin.py backup --output backup_20240404.zip
-python admin.py health
+# 系统
+python admin.py system health
+python admin.py system stats
+python admin.py system backup
 ```
 
 ---
 
-## 外部 API 调用分析
+## 10. 外部依赖
 
-### LLM API（OpenAI / DeepSeek）
+### LLM（OpenAI/DeepSeek）
 
-**用途：** 任务规划、结果验证、内容生成（诊断/语料/题目/问答）
-
-**调用位置：**
-
-| 调用方 | 用途 |
-|--------|------|
-| `orchestrator/planner.py` | 将用户请求分解为子任务 |
-| `orchestrator/verifier.py` | 验证子任务结果是否满足接受标准 |
-| `sub_agents/diagnosis.py` | 生成错误分析报告和相似题 |
-| `sub_agents/corpus.py` | 按难度和体裁生成英文文章 |
-| `sub_agents/question.py` | 生成阅读理解选择题和解析 |
-| `sub_agents/qa.py` | 解析句子、讲解语法、翻译内容、工具调用 |
-
-**API 封装：** `app/services/llm_service.py`（基于 LangChain `ChatOpenAI`）
-
-**配置切换：**
-
-```
-# 使用 OpenAI
-OPENAI_API_KEY=sk-...
-LLM_MODEL=gpt-4o-mini       # 默认
-
-# 使用 DeepSeek
-DEEPSEEK_API_KEY=...
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
-```
-
----
+- **使用场景**：所有 Sub-Agent 的推理输出、Planner 任务分解、Verifier 结果验证
+- **调用方式**：`app/services/llm_service.py`，支持 `OPENAI_BASE_URL` 自定义（可接入 DeepSeek 等）
+- **输出格式**：所有 LLM 调用均要求返回严格 JSON，异常自动捕获并 fallback
 
 ### 有道词典 API
 
-**用途：** 英语单词的中文释义和音标查询
-
-**调用位置：** `app/tools/dictionary.py` → `lookup_word()`  
-**触发条件：** QA Agent 处理 `query_type="word"` 请求时
-
-| 属性 | 值 |
-|------|-----|
-| 接口地址 | `https://openapi.youdao.com/api` |
-| 请求方式 | GET |
-| 超时时间 | 10 秒 |
-
-**错误处理：** 若未配置凭据，自动回退到桩实现。
+- **使用场景**：QAExpert 查词（query_type=word）
+- **封装**：`app/tools/dictionary.py`
+- **说明**：不需要配置 Key，使用公开接口；LLM 作为补充释义
 
 ---
 
-## 请求处理流程
+## 11. 配置与环境变量
 
-```
-POST /api/attempt
-       │
-       ▼
-  生成 request_id，保存 Checkpoint（PENDING）
-       │
-       ▼
-  [后台任务] Orchestrator._run()  ← 最多 20 次迭代
-       │
-       ├── PENDING → PLANNING：Planner 分解任务为子任务列表
-       │     ├── attempt / corpus / question / qa → 规则化快速规划
-       │     └── training_set → 生成总体规划子任务（corpus_expert, enable_planning=True）
-       │
-       ├── WAITING → 执行：Dispatcher 调用 Sub-Agent
-       │              ├── 注入工作记忆 + 长期记忆 + 语料库
-       │              ├── 解析跨任务输入引用（article_task_id → article content）
-       │              ├── Verifier 验证结果
-       │              ├── 通过：标记子任务完成 → 注入 new_sub_tasks（动态子任务注入）
-       │              └── 失败：标记为 RETRY
-       │
-       ├── RETRY → 重规划：调整输入参数，重新执行（最多重试 2 次）
-       │
-       └── COMPLETED / FAILED：持久化最终结果
-              │
-              ▼
-       GET /api/result/{request_id}  ← 客户端轮询
-```
-
-**training_set 完整流程：**
-```
-corpus_expert (enable_planning=True)
-       │  读取语料库 + 用户错题/战力值
-       │  LLM 生成 4 篇文章规划
-       ▼
-  返回 training_plan + new_sub_tasks
-       │  Orchestrator 注入 4 × (corpus_expert + question_expert)
-       ▼
-  dyn_c1 → dyn_q1（文章1 + 题目1）
-  dyn_c2 → dyn_q2（文章2 + 题目2）
-  dyn_c3 → dyn_q3（文章3 + 题目3）
-  dyn_c4 → dyn_q4（文章4 + 题目4）
-```
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `JWT_SECRET_KEY` | JWT 签名密钥（生产环境**必须**设置为强随机字符串） | 内置 dev 默认值（不安全） |
+| `OPENAI_API_KEY` | OpenAI/DeepSeek API Key | 无（LLM 调用将失败） |
+| `OPENAI_BASE_URL` | API 地址（支持代理/国内节点） | OpenAI 官方 URL |
+| `OPENAI_MODEL` | 使用的模型名 | `gpt-4o` |
 
 ---
 
-## Sub-Agent 说明
+## 12. 测试
 
-| Agent | 模块 | 功能 |
-|-------|------|------|
-| `diagnosis_expert` | `sub_agents/diagnosis.py` | 错误分析、相似题生成 |
-| `corpus_expert` | `sub_agents/corpus.py` | 英文文章生成（L1–L4 难度，3 种体裁）；**总体规划**（读取语料库+学情，生成4文章训练方案，动态注入子任务）；**风格化生成**（以真题为风格参考） |
-| `question_expert` | `sub_agents/question.py` | 阅读理解题目生成（支持连续出多题；支持通过 `article_task_id` 从前序任务读取文章） |
-| `qa_expert` | `sub_agents/qa.py` | 单词查询（有道）、句子解析、语法讲解、翻译、LangChain 工具调用 |
+```bash
+# 运行全部测试
+python -m pytest tests/ -q
 
-所有 Sub-Agent 继承自 `BaseSubAgent`，通过 `load_prompt(name)` 加载提示词文件，通过 `_call_llm(prompt)` 调用 LLM。
+# 运行特定测试模块
+python -m pytest tests/test_auth.py -v
+python -m pytest tests/test_memory.py -v
+python -m pytest tests/test_agent.py -v
+```
+
+测试框架：`pytest` + `pytest-asyncio`（`asyncio_mode=auto`）
+
+测试覆盖：JWT 认证、用户注册/登录/密码、错题本、遗忘曲线、工作记忆、Sub-Agent 集成。
 
 ---
 
-## 配置与环境变量
+## 前端开发
 
-| 环境变量 | 说明 | 必填 |
-|----------|------|------|
-| `OPENAI_API_KEY` | OpenAI API Key | 与 DeepSeek 二选一 |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | 与 OpenAI 二选一 |
-| `DEEPSEEK_BASE_URL` | DeepSeek API 地址 | 使用 DeepSeek 时必填 |
-| `LLM_MODEL` | 模型名称，默认 `gpt-4o-mini` | 否 |
-| `YOUDAO_APP_KEY` | 有道词典应用 ID | 否（缺失时单词查询降级） |
-| `YOUDAO_APP_SECRET` | 有道词典应用密钥 | 否（缺失时单词查询降级） |
-| `JWT_SECRET_KEY` | JWT 签名密钥 | **生产环境必填** |
+详细的接口文档（含所有字段说明、请求/响应示例、典型场景代码）请参见：
+
+📄 **[docs/frontend_follow.md](docs/frontend_follow.md)**
 
 ---
 
-## 快速开始
-
-```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 配置环境变量
-export OPENAI_API_KEY=sk-...
-export JWT_SECRET_KEY=your-secret-key-change-in-production
-export YOUDAO_APP_KEY=...
-export YOUDAO_APP_SECRET=...
-
-# 生成内测邀请码
-python admin.py invite create --max-uses 10 --note "内测用户"
-
-# 启动服务
-uvicorn app.main:app --reload
-
-# 运行测试
-pytest
-```
-
-**示例：注册新用户**
-
-```bash
-# 1. 验证邀请码
-curl -X POST http://localhost:8000/api/auth/verify-invite \
-  -H "Content-Type: application/json" \
-  -d '{"invite_code": "ABC12345"}'
-
-# 2. 注册
-curl -X POST http://localhost:8000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "invite_code": "ABC12345",
-    "username": "张三",
-    "exam_region": "全国I卷",
-    "grade": "高三"
-  }'
-```
-
-**示例：提交错误诊断请求**
-
-```bash
-curl -X POST http://localhost:8000/api/attempt \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "student_001",
-    "request_type": "attempt",
-    "paragraph": "The industrial revolution changed society...",
-    "question_text": "What is the main idea of this passage?",
-    "options": {"A": "...", "B": "...", "C": "...", "D": "..."},
-    "user_answer": "A",
-    "correct_answer": "C",
-    "time_spent": 45
-  }'
-```
-
-**示例：查询处理结果**
-
-```bash
-curl http://localhost:8000/api/result/req_xxxxxxxxxxxxxx
-```
+*ReadWise AI v0.2.0 | FastAPI + LangChain + OpenAI*

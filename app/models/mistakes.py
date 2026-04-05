@@ -189,6 +189,18 @@ class MistakeBook:
             )
         return "\n".join(lines)
 
+    def delete(self, mistake_id: str) -> bool:
+        """Remove an entry by its ID.
+
+        Returns True if the entry was found and removed.
+        """
+        before = len(self._entries)
+        self._entries = [e for e in self._entries if e.mistake_id != mistake_id]
+        if len(self._entries) < before:
+            self._save()
+            return True
+        return False
+
     @property
     def total(self) -> int:
         return len(self._entries)
