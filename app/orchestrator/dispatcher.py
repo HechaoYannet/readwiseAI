@@ -110,7 +110,7 @@ class Dispatcher:
         .. deprecated::
             Prefer ``execute_single`` called from the Orchestrator loop so that
             each task is verified immediately after completion.  This method is
-            retained for backward compatibility with tests.
+            retained for backward compatibility with tests and external callers.
         """
         for task in state.sub_tasks:
             if task.status != SubTaskStatus.PENDING:
