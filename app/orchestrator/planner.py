@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 from app.models.state import OrchestratorState, SubTask, SubTaskStatus
 from app.services.llm_service import llm_json_call
+from app.services import llm_logger
 
 logger = logging.getLogger(__name__)
 
@@ -259,12 +260,8 @@ class Planner:
             user_request=json.dumps(user_request)
         )
         state.status_history.append("# 智能体正在决策")
-        from app.services.llm_logger import with_context
-        @with_context(state.request_id, "planner", "head")
-        async def call_planner():
-            return await llm_json_call(prompt)
-        route_decision = await call_planner()
-        #route_decision = await llm_json_call(prompt)
+        llm_logger.set_context(state.request_id, "planner", "head")
+        route_decision = await llm_json_call(prompt)
         planning_strategy = route_decision.get("planning_strategy", "llm-based")
 
         plan = None
@@ -279,13 +276,9 @@ class Planner:
                 user_request=json.dumps(user_request),
                 context="",
             )
-            from app.services.llm_logger import with_context
-            @with_context(state.request_id, "planner", "head")
-            async def call_planner():
-                return await llm_json_call(prompt)
-            plan = await call_planner()
-            #plan = await llm_json_call(prompt)
-            if not await plan:
+            llm_logger.set_context(state.request_id, "planner", "head")
+            plan = await llm_json_call(prompt)
+            if not plan:
                 logger.warning(
                     "LLM-based planner failed to generate a plan for %s, falling back to RULE",
                     state.request_id,

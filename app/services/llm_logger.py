@@ -22,6 +22,7 @@ Usage
 """
 from __future__ import annotations
 
+import inspect
 import logging
 from functools import wraps
 from contextvars import ContextVar
@@ -95,11 +96,7 @@ def with_context(request_id: str, agent_name: str, task_id: str):
     """
 
     def decorator(func):
-        if hasattr(func, '__call__') and (
-                hasattr(func, '__is_coroutine__') or
-                hasattr(func, '__await__') or
-                func.__doc__ and 'async' in func.__doc__
-        ):
+        if inspect.iscoroutinefunction(func):
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 token1 = _ctx_request_id.set(request_id)
