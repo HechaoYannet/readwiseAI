@@ -88,7 +88,7 @@ class WorkingMemory(BaseModel):
         """Helper to maintain a single most recent session ID in _session.json."""
 
         session_list = cls.load_session_list(session_type, user_id)
-        if not session_list or session_list[0] != session_id:
+        if (not session_list) or (session_list[0] != session_id):
             if session_id in session_list:
                 session_list.remove(session_id)  # 删除第一个匹配项
                 session_list.insert(0, session_id)  # 插入到开头
@@ -127,9 +127,9 @@ class WorkingMemory(BaseModel):
         if not path.exists():
             return []
         try:
-            session_id = path.read_text(encoding="utf-8").strip()
+            session_id = json.loads(path.read_text(encoding="utf-8"))
             if session_id:
-                return [session_id]
+                return session_id
             return []
         except Exception as exc:
             logger.error("Failed to load session list for user %s: %s", user_id, exc)

@@ -133,7 +133,8 @@ class Dispatcher:
                 agent_name=task.assigned_to,
                 task_id=task.sub_task_id,
             )
-        except Exception:  # pragma: no cover
+        except Exception as exp:  # pragma: no cover
+            print(f"Failed to set LLM logger context for task {task.sub_task_id}: {exp}")
             pass
 
         try:

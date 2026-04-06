@@ -84,35 +84,51 @@ def set_context(request_id: str, agent_name: str, task_id: str) -> None:
     _ctx_task_id.set(task_id)
 
 
-# ========== 新增的装饰器 ==========
 def with_context(request_id: str, agent_name: str, task_id: str):
-    """
-    为函数设置 LLM 日志上下文的装饰器
-    Args:
-        request_id: 请求ID
-        agent_name: Agent名称
-        task_id: 任务ID
-    Usage:
-        from app.services import llm_logger
-        @llm_logger.with_context(state.request_id, "planner", "sub_000")
-        def my_function():
-            pass
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                set_context(
-                    request_id=request_id,
-                    agent_name=agent_name,
-                    task_id=task_id,
-                )
-            except Exception:
-                pass
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
+    """Decorator to automatically set context for a function or coroutine.
 
+    Usage:
+        @with_context(request_id, agent_name, task_id)
+        async def my_llm_function():
+            # Context is automatically set when this function is called
+            return await llm_json_call(...)
+    """
+
+    def decorator(func):
+        if hasattr(func, '__call__') and (
+                hasattr(func, '__is_coroutine__') or
+                hasattr(func, '__await__') or
+                func.__doc__ and 'async' in func.__doc__
+        ):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                token1 = _ctx_request_id.set(request_id)
+                token2 = _ctx_agent_name.set(agent_name)
+                token3 = _ctx_task_id.set(task_id)
+                try:
+                    return await func(*args, **kwargs)
+                finally:
+                    _ctx_request_id.reset(token1)
+                    _ctx_agent_name.reset(token2)
+                    _ctx_task_id.reset(token3)
+
+            return async_wrapper
+        else:
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                token1 = _ctx_request_id.set(request_id)
+                token2 = _ctx_agent_name.set(agent_name)
+                token3 = _ctx_task_id.set(task_id)
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    _ctx_request_id.reset(token1)
+                    _ctx_agent_name.reset(token2)
+                    _ctx_task_id.reset(token3)
+
+            return sync_wrapper
+
+    return decorator
 
 def get_request_id() -> str:
     """Return the request_id currently active in this context."""

@@ -93,8 +93,6 @@ async def llm_json_call(prompt: str) -> Dict[str, Any]:
     try:
         response = await llm.ainvoke(prompt)
         raw_content = response.content if hasattr(response, "content") else str(response)
-        print("LLM raw response:", raw_content)  # Debug print
-        print("prompt:", prompt)  # Debug print
         # Strip Markdown code fences if present
         content = raw_content.strip()
         if content.startswith("```"):

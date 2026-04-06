@@ -148,7 +148,7 @@ def _make_rule_based_plan(user_request: Dict[str, Any]) -> Dict[str, Any]:
                         "user_answer": user_request.get("user_answer", ""),
                         "correct_answer": user_request.get("correct_answer", ""),
                         "time_spent": user_request.get("time_spent", 0),
-                        "need_similar": True,
+                        "need_similar": user_request.get("need_similar", False),
                     },
                     "acceptance_criteria": [
                         "包含 error_category 字段",
@@ -203,7 +203,7 @@ def _make_rule_based_plan(user_request: Dict[str, Any]) -> Dict[str, Any]:
 
     if request_type == "qa":
         return {
-            "overall_goal": "回答学生的语言问题",
+            "overall_goal": "回答学生的问题",
             "sub_tasks": [
                 {
                     "sub_task_id": "sub_001",
@@ -214,7 +214,7 @@ def _make_rule_based_plan(user_request: Dict[str, Any]) -> Dict[str, Any]:
                         "content": user_request.get("content", ""),
                         "context_sentence": user_request.get("context_sentence", ""),
                     },
-                    "acceptance_criteria": ["包含释义信息"],
+                    "acceptance_criteria": [],
                     "depends_on": [],
                 }
             ],
@@ -254,21 +254,17 @@ class Planner:
         user_request = state.original_request
 
         # Set LLM logger context so llm_json_call can emit structured logs.
-        try:
-            from app.services import llm_logger
-            llm_logger.set_context(
-                request_id=state.request_id,
-                agent_name="llm_router",
-                task_id="head",
-            )
-        except Exception:  # pragma: no cover
-            pass
         # LLM决定使用Rule-based planning还是LLM-based planning。
         prompt = Template(ROUTER_DECIDER_PROMPT).substitute(
             user_request=json.dumps(user_request)
         )
         state.status_history.append("# 智能体正在决策")
-        route_decision = await llm_json_call(prompt)
+        from app.services.llm_logger import with_context
+        @with_context(state.request_id, "planner", "head")
+        async def call_planner():
+            return await llm_json_call(prompt)
+        route_decision = await call_planner()
+        #route_decision = await llm_json_call(prompt)
         planning_strategy = route_decision.get("planning_strategy", "llm-based")
 
         plan = None
@@ -279,21 +275,17 @@ class Planner:
             logger.info("Planner chose LLM-based planning for %s", state.request_id)
 
             # Set LLM logger context so llm_json_call can emit structured logs.
-            try:
-                from app.services import llm_logger
-                llm_logger.set_context(
-                    request_id=state.request_id,
-                    agent_name="planner",
-                    task_id="sub_000",
-                )
-            except Exception:  # pragma: no cover
-                pass
             prompt = Template(PLANNING_PROMPT).substitute(
                 user_request=json.dumps(user_request),
                 context="",
             )
-            plan = await llm_json_call(prompt)
-            if not plan:
+            from app.services.llm_logger import with_context
+            @with_context(state.request_id, "planner", "head")
+            async def call_planner():
+                return await llm_json_call(prompt)
+            plan = await call_planner()
+            #plan = await llm_json_call(prompt)
+            if not await plan:
                 logger.warning(
                     "LLM-based planner failed to generate a plan for %s, falling back to RULE",
                     state.request_id,
