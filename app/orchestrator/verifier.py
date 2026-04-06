@@ -5,6 +5,7 @@ import logging
 from string import Template
 from app.models.state import OrchestratorState, SubTask, SubTaskStatus
 from app.services.llm_service import llm_json_call
+from app.services import llm_logger
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class Verifier:
                 sub_task_result=str(completed_task.result),
             )
             state.status_history.append(f"# 智能体正在校验：{completed_task.sub_task_id}")
+            llm_logger.set_context(state.request_id, "verifier", completed_task.sub_task_id)
             verdict = await llm_json_call(prompt)
             state.status_history.append(f"# {completed_task.sub_task_id} 校验完成")
 

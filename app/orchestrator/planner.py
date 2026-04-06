@@ -320,6 +320,7 @@ class Planner:
 ## 请输出调整后的输入（严格JSON格式，只输出JSON）
 """
         state.status_history.append(f"# 智能体正在优化任务 {failed_task.sub_task_id}")
+        llm_logger.set_context(state.request_id, "planner", failed_task.sub_task_id)
         adjusted = await llm_json_call(prompt)
         if adjusted:
             failed_task.input = adjusted
