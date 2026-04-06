@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Inline fallback prompt used when the prompt file is absent
 _FALLBACK_PROMPT = """
-你是高考英语出题专家。请根据以下文章，一次性生成 {count} 道不同题型的阅读理解题。
+你是高考英语出题专家。请根据以下文章，一次性生成 $count 道不同题型的阅读理解题。
 
 ## 文章
 $article

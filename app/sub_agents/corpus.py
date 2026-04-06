@@ -170,7 +170,7 @@ class CorpusExpert(BaseSubAgent):
     description = "高考风格文章生成（支持总体规划 / 风格化生成 / 工作记忆同步）"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any],state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
     ) -> Dict[str, Any]:
         start = time.time()
 
@@ -210,7 +210,7 @@ class CorpusExpert(BaseSubAgent):
                 topic=topic,
                 word_count=word_count,
                 style_reference=style_reference or "（无特定风格参考）",
-                description=description or "（无特定出题描述）",
+                description=(description or "（无特定出题描述）") + validation.get("issues", []).__str__()
             )
             article = await self._call_llm(prompt)
             if not article:
@@ -255,7 +255,7 @@ class CorpusExpert(BaseSubAgent):
     # ------------------------------------------------------------------
 
     async def _run_planning_mode(
-        self, context: Dict[str, Any], start: float, state: OrchestratorState
+            self, context: Dict[str, Any], start: float, state: OrchestratorState
     ) -> Dict[str, Any]:
         """Read corpus + user data, generate a 4-article training plan."""
         # 1. Corpus index
@@ -304,7 +304,7 @@ class CorpusExpert(BaseSubAgent):
         # Build new sub-tasks for dynamic injection by the Orchestrator
         new_sub_tasks = _build_training_sub_tasks(training_plan)
 
-        res= {
+        res = {
             "training_plan": training_plan,
             "new_sub_tasks": new_sub_tasks,
             "metadata": {
@@ -322,7 +322,7 @@ class CorpusExpert(BaseSubAgent):
     # ------------------------------------------------------------------
 
     def _get_style_reference(
-        self, reference_id: Optional[str], context: Dict[str, Any]
+            self, reference_id: Optional[str], context: Dict[str, Any]
     ) -> str:
         """Load a reference article from the corpus for style guidance."""
         if not reference_id:
@@ -348,7 +348,7 @@ class CorpusExpert(BaseSubAgent):
             return ""
 
     def _sync_working_memory(
-        self, article: Dict[str, Any], context: Dict[str, Any]
+            self, article: Dict[str, Any], context: Dict[str, Any]
     ) -> None:
         """Persist the generated article to the session's working memory."""
         wm = context.get("working_memory")

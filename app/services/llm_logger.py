@@ -23,6 +23,7 @@ Usage
 from __future__ import annotations
 
 import logging
+from functools import wraps
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,7 +43,7 @@ _ctx_task_id: ContextVar[str] = ContextVar("llm_log_task_id", default="")
 # ---------------------------------------------------------------------------
 _LOG_DIR = Path("data/logs/llm")
 _MAX_PROMPT_PREVIEW = 2000   # chars shown in log (full prompt may be very long)
-_MAX_OUTPUT_PREVIEW = 2000
+_MAX_OUTPUT_PREVIEW = 4000
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +82,36 @@ def set_context(request_id: str, agent_name: str, task_id: str) -> None:
     _ctx_request_id.set(request_id)
     _ctx_agent_name.set(agent_name)
     _ctx_task_id.set(task_id)
+
+
+# ========== 新增的装饰器 ==========
+def with_context(request_id: str, agent_name: str, task_id: str):
+    """
+    为函数设置 LLM 日志上下文的装饰器
+    Args:
+        request_id: 请求ID
+        agent_name: Agent名称
+        task_id: 任务ID
+    Usage:
+        from app.services import llm_logger
+        @llm_logger.with_context(state.request_id, "planner", "sub_000")
+        def my_function():
+            pass
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                set_context(
+                    request_id=request_id,
+                    agent_name=agent_name,
+                    task_id=task_id,
+                )
+            except Exception:
+                pass
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def get_request_id() -> str:
@@ -138,10 +169,10 @@ def log_llm_call(
 
     # Truncate very long prompts/responses to keep logs readable
     prompt_display = prompt if len(prompt) <= _MAX_PROMPT_PREVIEW else (
-        prompt[:_MAX_PROMPT_PREVIEW] + f"\n… [截断, 共 {len(prompt)} 字符]"
+        prompt[_MAX_PROMPT_PREVIEW:] + f"\n… [前半截断, 共 {len(prompt)} 字符]"
     )
     response_display = raw_response if len(raw_response) <= _MAX_OUTPUT_PREVIEW else (
-        raw_response[:_MAX_OUTPUT_PREVIEW] + f"\n… [截断, 共 {len(raw_response)} 字符]"
+        raw_response[:_MAX_OUTPUT_PREVIEW] + f"\n… [后半截断, 共 {len(raw_response)} 字符]"
     )
 
     status_icon = "✅" if success else "❌"

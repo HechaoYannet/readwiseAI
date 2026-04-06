@@ -43,17 +43,27 @@ Content-Type: application/json
 Authorization: Bearer {{auth_token}}
 
 {
-  "user_id": "u1",
-  "request_type": "attempt",
-  "paragraph": "The industrial revolution changed society...",
-  "question_text": "What is the main idea of this passage?",
-  "options": {
-    "A": "...",
-    "B": "...",
-    "C": "...",
-    "D": "..."
-  },
-  "user_answer": "A",
-  "correct_answer": "C",
-  "time_spent": 45
+  "paragraph": "",
+  "question_text": "",
+  "options": {},
+  "user_answer": "",
+  "correct_answer": "",
+  "time_spent": 0,
+  "request_type": "qa",
+  "query_type": "free",
+  "content": "你好👋",
+  "context_sentence": null,
+  "difficulty": null,
+  "genre": null,
+  "topic": null,
+  "word_count": null,
+  "article": null,
+  "question_type": null,
+  "question_types": null,
+  "count": null,
+  "session_id": "",
+  "enable_planning": null,
+  "reference_id": null,
+  "user_level": null,
+  "question_number": null
 }

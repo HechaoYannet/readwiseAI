@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, Optional
 from string import Template
 
-from pydantic import json
+import json
 
 from app import orchestrator
 from app.models import working_memory

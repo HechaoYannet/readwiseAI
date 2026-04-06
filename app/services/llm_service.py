@@ -23,7 +23,7 @@ OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
-TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
+TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "1.3"))
 
 
 class _StubLLM:
@@ -93,6 +93,8 @@ async def llm_json_call(prompt: str) -> Dict[str, Any]:
     try:
         response = await llm.ainvoke(prompt)
         raw_content = response.content if hasattr(response, "content") else str(response)
+        print("LLM raw response:", raw_content)  # Debug print
+        print("prompt:", prompt)  # Debug print
         # Strip Markdown code fences if present
         content = raw_content.strip()
         if content.startswith("```"):

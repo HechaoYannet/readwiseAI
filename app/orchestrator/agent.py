@@ -40,6 +40,8 @@ class Orchestrator:
 
     async def _run(self, state: OrchestratorState) -> None:
         for _iteration in range(20):  # guard against infinite loops
+
+            # 计划器
             if state.status == RequestStatus.PENDING:
                 state.status = RequestStatus.PLANNING
                 state = await self.planner.plan(state)
@@ -48,6 +50,7 @@ class Orchestrator:
                     break
                 state.status = RequestStatus.WAITING
 
+            # 调度器和验收器
             elif state.status == RequestStatus.WAITING:
                 # Dispatch any pending tasks
                 state = await self.dispatcher.dispatch_all_pending(state)
@@ -66,7 +69,7 @@ class Orchestrator:
                 if unverified:
                     state = await self.verifier.verify(state, unverified)
                     if unverified.status == SubTaskStatus.FAILED:
-                        # Check if the whole request should be failed
+                        # 总上限是否到达
                         if not self._any_retryable(state):
                             state.status = RequestStatus.FAILED
                     elif unverified.status == SubTaskStatus.RETRY:
@@ -104,6 +107,7 @@ class Orchestrator:
 
     # ------------------------------------------------------------------
     # Dynamic task injection (Plan A – LangChain-style flexibility)
+    # 动态添加任务（Plan A – 类似 LangChain 的灵活性）
     # ------------------------------------------------------------------
 
     def _inject_new_tasks(
