@@ -12,6 +12,7 @@ from string import Template
 
 from app.models import working_memory
 from app.models.state import OrchestratorState
+from app.services import llm_logger
 from app.sub_agents.base import BaseSubAgent
 from app.tools.dictionary import lookup_word
 
@@ -180,7 +181,31 @@ class QAExpert(BaseSubAgent):
             response: Any = None
 
             for _ in range(_MAX_TOOL_CALLS):
-                response = await llm_with_tools.ainvoke(messages)
+                start_time = time.monotonic()
+                raw_content = ""
+                tc_success = False
+                tc_error = ""
+                response = None
+                try:
+                    response = await llm_with_tools.ainvoke(messages)
+                    raw_content = response.content if hasattr(response, "content") else str(response)
+                    tc_success = True
+                except Exception as exc:
+                    tc_error = str(exc)
+                    raise
+                finally:
+                    latency_ms = int((time.monotonic() - start_time) * 1000)
+                    tool_calls_info: Dict[str, Any] = {}
+                    if response is not None and hasattr(response, "tool_calls") and response.tool_calls:
+                        tool_calls_info = {"tool_calls": [tc.get("name", "") for tc in response.tool_calls]}
+                    llm_logger.log_llm_call(
+                        prompt=user_question,
+                        raw_response=raw_content,
+                        parsed=tool_calls_info,
+                        latency_ms=latency_ms,
+                        success=tc_success,
+                        error=tc_error,
+                    )
                 messages.append(response)
 
                 if not hasattr(response, "tool_calls") or not response.tool_calls:
