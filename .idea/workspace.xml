@@ -4,27 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1f0d6803-b5c4-4b12-8372-176217bf1a6e" name="更改" comment="修正了引用">
+    <list default="true" id="1f0d6803-b5c4-4b12-8372-176217bf1a6e" name="更改" comment="优化LLM流程">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/routes/attempts.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/routes/attempts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/routes/users.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/routes/users.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/models/state.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/models/state.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/models/working_memory.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/models/working_memory.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/orchestrator/dispatcher.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/orchestrator/dispatcher.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/orchestrator/planner.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/orchestrator/planner.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/sub_agents/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/sub_agents/corpus.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/corpus.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/sub_agents/diagnosis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/diagnosis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/sub_agents/qa.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/qa.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/sub_agents/question.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/sub_agents/question.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/prompts/corpus_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/corpus_prompt.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/prompts/diagnosis_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/diagnosis_prompt.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/prompts/qa_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/qa_prompt.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/prompts/question_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/data/prompts/question_prompt.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/MemoryDesign.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/MemoryDesign.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/重构.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/重构.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_memory.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_memory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/UserTest.http" beforeDir="false" afterPath="$PROJECT_DIR$/UserTest.http" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/orchestrator/verifier.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/orchestrator/verifier.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -113,9 +97,6 @@
   <component name="HttpClientOnboardingState">{
   &quot;isOnboardingCommentShown&quot;: true
 }</component>
-  <component name="HttpClientSelectedEnvironments">
-    <file url="file://$PROJECT_DIR$/test_main.http" />
-  </component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="CurrentFile" />
   </component>
@@ -133,8 +114,9 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
-    "FastAPI.readwise-backend.executor": "Run",
+    "FastAPI.readwise-backend.executor": "Debug",
     "HTTP 请求.UserTest | GET request to example server.executor": "Run",
+    "HTTP 请求.UserTest | GET request to retrieve attempt result.executor": "Run",
     "HTTP 请求.UserTest | POST attempt request to  server.executor": "Run",
     "HTTP 请求.UserTest | POST request to login and obtain auth token.executor": "Run",
     "HTTP 请求.UserTest | POST request to register a new user.executor": "Run",
@@ -148,9 +130,16 @@
     "HTTP 请求.test_main | #5.executor": "Run",
     "HTTP 请求.test_main | #6.executor": "Run",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python 测试.Python 测试 (llm_service.py 内).executor": "Run",
     "Python 测试.Python 测试 (test_log.py 内).executor": "Run",
+    "Python 测试.tests.test_prompt.test_planning_prompt 的 Python 测试.executor": "Run",
+    "Python 测试.tests.test_txt.test_pop_save 的 Python 测试.executor": "Run",
+    "Python 测试.tests.test_txt.test_pop_save_chatting 的 Python 测试.executor": "Run",
+    "Python 测试.tests.test_txt.test_write_and_load 的 Python 测试.executor": "Run",
     "Python 调试适配器子进程.Subprocess 6308.executor": "Debug",
+    "Python 调试适配器子进程.Subprocess 83040.executor": "Debug",
     "Python.Admin CLI.executor": "Run",
+    "Python.dictionary.executor": "Run",
     "Python.test.executor": "Run",
     "Python.tete.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
@@ -160,13 +149,14 @@
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "deletionFromPopupRequiresConfirmation": "false",
     "git-widget-placeholder": "dev",
+    "last_opened_file_path": "E:/PythonProject/readwise-ai/readwise-backend/tests",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "run.code.analysis.last.selected.profile": "pProject Default",
-    "settings.editor.selected.configurable": "reference.settingsdialog.IDE.editor.colors.com.intellij.openapi.options.colors.pages.ANSIColoredConsoleColorsPage",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
     "settings.editor.splitter.proportion": "0.22590362",
     "vue.rearranger.settings.migration": "true"
   }
@@ -175,7 +165,11 @@
     <option name="myDebuggerBackend" value="DEBUGPY" />
   </component>
   <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="E:\PythonProject\readwise-ai\readwise-backend\tests" />
+    </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="E:\PythonProject\readwise-ai\readwise-backend\data\logs\llm\trush" />
       <recent name="E:\PythonProject\readwise-ai\readwise-backend\docs" />
       <recent name="E:\PythonProject\readwise-ai\readwise-backend\rag" />
       <recent name="E:\PythonProject\readwise-ai\readwise-backend\app" />
@@ -188,55 +182,17 @@
           <value>
             <map>
               <entry key="UserTest | POST attempt request to  server" value="STOPPED" />
-              <entry key="UserTest | POST request to login and obtain auth token" value="STOPPED" />
-              <entry key="UserTest | POST request to register a new user" value="STOPPED" />
-              <entry key="UserTest | POST request to verify invite code" value="STOPPED" />
             </map>
           </value>
         </entry>
       </map>
     </option>
   </component>
-  <component name="RunManager" selected="Python.tete">
-    <configuration name="UserTest | GET request to example server" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="GET request to example server" runType="运行单个请求">
+  <component name="RunManager" selected="FastAPI.readwise-backend">
+    <configuration name="UserTest | GET request to retrieve attempt result" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="GET request to retrieve attempt result" index="5" runType="运行单个请求">
       <method v="2" />
     </configuration>
     <configuration name="UserTest | POST attempt request to  server" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST attempt request to  server" index="2" runType="运行单个请求">
-      <method v="2" />
-    </configuration>
-    <configuration name="UserTest | POST request to login and obtain auth token" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to login and obtain auth token" index="3" runType="运行单个请求">
-      <method v="2" />
-    </configuration>
-    <configuration name="UserTest | POST request to register a new user" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to register a new user" index="2" runType="运行单个请求">
-      <method v="2" />
-    </configuration>
-    <configuration name="UserTest | POST request to verify invite code" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" path="$PROJECT_DIR$/UserTest.http" executionIdentifier="POST request to verify invite code" runType="运行单个请求">
-      <method v="2" />
-    </configuration>
-    <configuration name="tete" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
-      <module name="readwise-backend" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="SDK_NAME" value="readwise-backend" />
-      <option name="WORKING_DIRECTORY" value="" />
-      <option name="IS_MODULE_SDK" value="false" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="DEBUG_JUST_MY_CODE" value="false" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/core/callbacks/tete.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
     <configuration name="readwise-backend" type="Python.FastAPI">
@@ -262,22 +218,75 @@
       <option name="launchJavascriptDebuger" value="false" />
       <method v="2" />
     </configuration>
+    <configuration name="tests.test_txt.test_pop_save 的 Python 测试" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="readwise-backend" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.test_txt.test_pop_save&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="tests.test_txt.test_pop_save_chatting 的 Python 测试" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="readwise-backend" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.test_txt.test_pop_save_chatting&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="tests.test_txt.test_write_and_load 的 Python 测试" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="readwise-backend" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.test_txt.test_write_and_load&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
     <list>
       <item itemvalue="FastAPI.readwise-backend" />
-      <item itemvalue="HTTP 请求.UserTest | POST request to login and obtain auth token" />
-      <item itemvalue="HTTP 请求.UserTest | POST request to register a new user" />
-      <item itemvalue="HTTP 请求.UserTest | POST request to verify invite code" />
-      <item itemvalue="HTTP 请求.UserTest | GET request to example server" />
+      <item itemvalue="HTTP 请求.UserTest | GET request to retrieve attempt result" />
       <item itemvalue="HTTP 请求.UserTest | POST attempt request to  server" />
-      <item itemvalue="Python.tete" />
+      <item itemvalue="Python 测试.tests.test_txt.test_pop_save 的 Python 测试" />
+      <item itemvalue="Python 测试.tests.test_txt.test_pop_save_chatting 的 Python 测试" />
+      <item itemvalue="Python 测试.tests.test_txt.test_write_and_load 的 Python 测试" />
     </list>
     <recent_temporary>
       <list>
         <item itemvalue="HTTP 请求.UserTest | POST attempt request to  server" />
-        <item itemvalue="HTTP 请求.UserTest | POST request to login and obtain auth token" />
-        <item itemvalue="HTTP 请求.UserTest | POST request to register a new user" />
-        <item itemvalue="HTTP 请求.UserTest | POST request to verify invite code" />
-        <item itemvalue="HTTP 请求.UserTest | GET request to example server" />
+        <item itemvalue="HTTP 请求.UserTest | GET request to retrieve attempt result" />
+        <item itemvalue="Python 测试.tests.test_txt.test_write_and_load 的 Python 测试" />
+        <item itemvalue="Python 测试.tests.test_txt.test_pop_save_chatting 的 Python 测试" />
+        <item itemvalue="Python 测试.tests.test_txt.test_pop_save 的 Python 测试" />
       </list>
     </recent_temporary>
   </component>
@@ -303,6 +312,10 @@
       <workItem from="1775282065280" duration="6666000" />
       <workItem from="1775291885942" duration="5164000" />
       <workItem from="1775297183376" duration="8730000" />
+      <workItem from="1775355182164" duration="7193000" />
+      <workItem from="1775364902258" duration="1312000" />
+      <workItem from="1775366260606" duration="21512000" />
+      <workItem from="1775417843286" duration="60846000" />
     </task>
     <task id="LOCAL-00001" summary="创建工程目录">
       <option name="closed" value="true" />
@@ -352,7 +365,79 @@
       <option name="project" value="LOCAL" />
       <updated>1775327677724</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="feat: enhance orchestrator state management with session ID and improve working memory handling">
+      <option name="closed" value="true" />
+      <created>1775347181984</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1775347181984</updated>
+    </task>
+    <task id="LOCAL-00008" summary="删除无用测试文件">
+      <option name="closed" value="true" />
+      <created>1775347403506</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1775347403506</updated>
+    </task>
+    <task id="LOCAL-00009" summary="修改CORS问题">
+      <option name="closed" value="true" />
+      <created>1775359738950</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1775359738950</updated>
+    </task>
+    <task id="LOCAL-00010" summary="修改了api相关">
+      <option name="closed" value="true" />
+      <created>1775368010298</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1775368010298</updated>
+    </task>
+    <task id="LOCAL-00011" summary="修改了/api/result相关">
+      <option name="closed" value="true" />
+      <created>1775399488115</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1775399488115</updated>
+    </task>
+    <task id="LOCAL-00012" summary="修正了LLM相关bug">
+      <option name="closed" value="true" />
+      <created>1775434147785</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1775434147785</updated>
+    </task>
+    <task id="LOCAL-00013" summary="添加/api/result 工作进度">
+      <option name="closed" value="true" />
+      <created>1775437497367</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1775437497367</updated>
+    </task>
+    <task id="LOCAL-00014" summary="添加/api/result 工作进度">
+      <option name="closed" value="true" />
+      <created>1775445686051</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1775445686051</updated>
+    </task>
+    <task id="LOCAL-00015" summary="优化LLM流程">
+      <option name="closed" value="true" />
+      <created>1775501113709</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1775501113709</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -375,28 +460,32 @@
     <MESSAGE value="修正了路径识别错无的问题" />
     <MESSAGE value="重新组织了文档" />
     <MESSAGE value="修正了引用" />
-    <option name="LAST_COMMIT_MESSAGE" value="修正了引用" />
+    <MESSAGE value="feat: enhance orchestrator state management with session ID and improve working memory handling" />
+    <MESSAGE value="删除无用测试文件" />
+    <MESSAGE value="修改CORS问题" />
+    <MESSAGE value="修改了api相关" />
+    <MESSAGE value="修改了/api/result相关" />
+    <MESSAGE value="修正了LLM相关bug" />
+    <MESSAGE value="添加/api/result 工作进度" />
+    <MESSAGE value="优化LLM流程" />
+    <option name="LAST_COMMIT_MESSAGE" value="优化LLM流程" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/app/sub_agents/corpus.py</url>
-          <line>10</line>
-          <option name="timeStamp" value="7" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/app/sub_agents/diagnosis.py</url>
-          <line>3</line>
-          <option name="timeStamp" value="10" />
+          <url>file://$PROJECT_DIR$/app/orchestrator/dispatcher.py</url>
+          <line>124</line>
+          <option name="timeStamp" value="23" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/readwise_backend$readwise_backend.coverage" NAME="readwise-backend 覆盖结果" MODIFIED="1775327369383" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/readwise_backend$.coverage" NAME=" 覆盖结果" MODIFIED="1775298878275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/readwise_backend$readwise_backend.coverage" NAME="readwise-backend 覆盖结果" MODIFIED="1775501505571" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/readwise_backend$.coverage" NAME=" 覆盖结果" MODIFIED="1775441497336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/readwise_backend$test.coverage" NAME="test 覆盖结果" MODIFIED="1775300126328" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/readwise_backend$dictionary.coverage" NAME="dictionary 覆盖结果" MODIFIED="1775366593691" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/app/tools" />
     <SUITE FILE_PATH="coverage/readwise_backend$Admin_CLI.coverage" NAME="Admin CLI 覆盖结果" MODIFIED="1775292795255" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
     <SUITE FILE_PATH="coverage/readwise_backend$tete.coverage" NAME="tete 覆盖结果" MODIFIED="1775339631013" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>

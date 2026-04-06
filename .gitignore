@@ -26,6 +26,10 @@ data/tasks/
 data/sqlite/
 data/working/sessions/
 data/long_term/
+data/logs/
+data/users/
+data/request_index/
+
 
 # Pytest cache
 .pytest_cache/

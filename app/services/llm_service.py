@@ -9,18 +9,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dotenv import load_dotenv
 from typing import Any, Dict, Optional
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # LLM backend selection
 # ---------------------------------------------------------------------------
 
-_OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
-_DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-_DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
+DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_DEEPSEEK_BASE = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "1.3"))
 
 
 class _StubLLM:
@@ -37,21 +40,22 @@ class _StubMessage:
 
 
 def _build_llm():
-    if _OPENAI_KEY:
+    if OPENAI_KEY:
         try:
             from langchain_openai import ChatOpenAI  # type: ignore
 
-            return ChatOpenAI(model=_MODEL, api_key=_OPENAI_KEY)
+            return ChatOpenAI(model=MODEL, api_key=OPENAI_KEY)
         except Exception as exc:
             logger.warning("Failed to build ChatOpenAI: %s – falling back to stub", exc)
-    elif _DEEPSEEK_KEY:
+    elif DEEPSEEK_KEY:
         try:
             from langchain_openai import ChatOpenAI  # type: ignore
 
             return ChatOpenAI(
-                model=_MODEL,
-                api_key=_DEEPSEEK_KEY,
-                base_url=_DEEPSEEK_BASE,
+                model=MODEL,
+                api_key=DEEPSEEK_KEY,
+                base_url=DEEPSEEK_BASE_DEEPSEEK_BASE,
+                temperature=TEMPERATURE
             )
         except Exception as exc:
             logger.warning("Failed to build DeepSeek LLM: %s – falling back to stub", exc)
@@ -73,20 +77,48 @@ async def llm_json_call(prompt: str) -> Dict[str, Any]:
     """Call LLM and parse the response as JSON.
 
     Returns an empty dict on parse failure so callers can handle gracefully.
+    Automatically writes a structured Markdown log entry via llm_logger when
+    a request context is active (request_id set via contextvars).
     """
+    import time as _time
+    from app.services import llm_logger
+
     llm = get_llm()
+    raw_content = ""
+    parsed: Dict[str, Any] = {}
+    error_msg = ""
+    success = False
+    t0 = _time.monotonic()
+
     try:
         response = await llm.ainvoke(prompt)
-        content = response.content if hasattr(response, "content") else str(response)
+        raw_content = response.content if hasattr(response, "content") else str(response)
         # Strip Markdown code fences if present
-        content = content.strip()
+        content = raw_content.strip()
         if content.startswith("```"):
             lines = content.splitlines()
             content = "\n".join(lines[1:-1]) if len(lines) > 2 else content
-        return json.loads(content)
+        parsed = json.loads(content)
+        success = True
+        return parsed
     except json.JSONDecodeError as exc:
+        error_msg = f"JSON parse error: {exc}"
         logger.error("LLM response is not valid JSON: %s", exc)
         return {}
     except Exception as exc:
+        error_msg = str(exc)
         logger.error("LLM call failed: %s", exc)
         return {}
+    finally:
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        try:
+            llm_logger.log_llm_call(
+                prompt=prompt,
+                raw_response=raw_content,
+                parsed=parsed,
+                latency_ms=latency_ms,
+                success=success,
+                error=error_msg,
+            )
+        except Exception as log_exc:  # pragma: no cover
+            logger.warning("LLM logger error: %s", log_exc)

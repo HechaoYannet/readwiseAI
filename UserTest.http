@@ -43,17 +43,36 @@ Content-Type: application/json
 Authorization: Bearer {{auth_token}}
 
 {
-  "user_id": "u1",
-  "request_type": "attempt",
-  "paragraph": "The industrial revolution changed society...",
-  "question_text": "What is the main idea of this passage?",
-  "options": {
-    "A": "...",
-    "B": "...",
-    "C": "...",
-    "D": "..."
-  },
-  "user_answer": "A",
-  "correct_answer": "C",
-  "time_spent": 45
+  "paragraph": "",
+  "question_text": "",
+  "options": {},
+  "user_answer": "",
+  "correct_answer": "",
+  "time_spent": 0,
+  "request_type": "training_set",
+  "query_type": "",
+  "content": "根据学生目前的学习情况和考试成绩，生成训练题组，以帮助他们提高成绩。",
+  "context_sentence": null,
+  "difficulty": null,
+  "genre": null,
+  "topic": null,
+  "word_count": null,
+  "article": null,
+  "question_type": null,
+  "question_types": null,
+  "count": null,
+  "session_id": "",
+  "enable_planning": null,
+  "reference_id": null,
+  "user_level": null,
+  "question_number": null
 }
+> {%
+    // 提取 request_id 供后续请求使用
+    client.global.set("request_id", response.body.request_id);
+%}
+
+### GET request to retrieve attempt result
+GET http://localhost:8000/api/result/{{request_id}}
+Authorization: Bearer {{auth_token}}
+Content-Type: application/json

@@ -12,6 +12,7 @@ from string import Template
 
 from app.models import working_memory
 from app.models.state import OrchestratorState
+from app.services import llm_logger
 from app.sub_agents.base import BaseSubAgent
 from app.tools.dictionary import lookup_word
 
@@ -74,7 +75,7 @@ class QAExpert(BaseSubAgent):
     description = "查词、长难句拆解、语法解释、翻译，支持通过工具访问文章和错题本"
 
     async def execute(
-            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: "OrchestratorState | None" = None
     ) -> Dict[str, Any]:
         start = time.time()
         query_type = input.get("query_type", "free")
@@ -85,8 +86,12 @@ class QAExpert(BaseSubAgent):
         has_memory = bool(
             context.get("working_memory") or context.get("long_term_memory")
         )
-        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
-        wm.add_message(role="user", content=content)
+        if state is not None:
+            wm = working_memory.WorkingMemory(session_id=state.session_id or "", user_id=state.user_id)
+            wm.add_message(role="user", content=content)
+
+        if state is not None:
+            state.status_history.append(f"# 大模型正在分析")
         if query_type == "word":
             result = await self._handle_word(content, context_sentence)
         elif query_type == "sentence":
@@ -104,7 +109,9 @@ class QAExpert(BaseSubAgent):
 
         result["metadata"] = {"latency_ms": self._timed(start), "agent": self.name}
 
-        wm.add_message(role="assistant", content=str(result))
+        if state is not None:
+            state.status_history.append(f"# 大模型分析完成")
+            wm.add_message(role="assistant", content=str(result))
         return result
 
     # ------------------------------------------------------------------
@@ -177,7 +184,31 @@ class QAExpert(BaseSubAgent):
             response: Any = None
 
             for _ in range(_MAX_TOOL_CALLS):
-                response = await llm_with_tools.ainvoke(messages)
+                start_time = time.monotonic()
+                raw_content = ""
+                tc_success = False
+                tc_error = ""
+                response = None
+                try:
+                    response = await llm_with_tools.ainvoke(messages)
+                    raw_content = response.content if hasattr(response, "content") else str(response)
+                    tc_success = True
+                except Exception as exc:
+                    tc_error = str(exc)
+                    raise
+                finally:
+                    latency_ms = int((time.monotonic() - start_time) * 1000)
+                    tool_calls_info: Dict[str, Any] = {}
+                    if response is not None and hasattr(response, "tool_calls") and response.tool_calls:
+                        tool_calls_info = {"tool_calls": [tc.get("name", "") for tc in response.tool_calls]}
+                    llm_logger.log_llm_call(
+                        prompt=user_question,
+                        raw_response=raw_content,
+                        parsed=tool_calls_info,
+                        latency_ms=latency_ms,
+                        success=tc_success,
+                        error=tc_error,
+                    )
                 messages.append(response)
 
                 if not hasattr(response, "tool_calls") or not response.tool_calls:

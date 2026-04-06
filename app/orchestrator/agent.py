@@ -40,6 +40,8 @@ class Orchestrator:
 
     async def _run(self, state: OrchestratorState) -> None:
         for _iteration in range(20):  # guard against infinite loops
+
+            # 计划器
             if state.status == RequestStatus.PENDING:
                 state.status = RequestStatus.PLANNING
                 state = await self.planner.plan(state)
@@ -48,54 +50,50 @@ class Orchestrator:
                     break
                 state.status = RequestStatus.WAITING
 
+            # 调度器和验收器：每次只执行一个任务，立即验收
             elif state.status == RequestStatus.WAITING:
-                # Dispatch any pending tasks
-                state = await self.dispatcher.dispatch_all_pending(state)
-
-                # Look for a completed-but-not-yet-verified task
-                unverified = next(
+                # Find the next pending task whose dependencies are all satisfied
+                next_task = next(
                     (
                         t
                         for t in state.sub_tasks
-                        if t.status == SubTaskStatus.COMPLETED
-                        and t.sub_task_id not in state.completed_results
+                        if t.status == SubTaskStatus.PENDING
+                        and self._deps_satisfied(t, state)
                     ),
                     None,
                 )
 
-                if unverified:
-                    state = await self.verifier.verify(state, unverified)
-                    if unverified.status == SubTaskStatus.FAILED:
-                        # Check if the whole request should be failed
-                        if not self._any_retryable(state):
-                            state.status = RequestStatus.FAILED
-                    elif unverified.status == SubTaskStatus.RETRY:
-                        state.status = RequestStatus.RETRY
-                    else:
-                        # Inject any new sub-tasks emitted by this task
-                        state = self._inject_new_tasks(state, unverified)
-                        if self._all_tasks_done(state):
-                            state.status = RequestStatus.COMPLETED
+                if next_task is not None:
+                    # Execute the single task
+                    state = await self.dispatcher.execute_single(next_task, state)
+
+                    # Immediately verify if execution succeeded
+                    if next_task.status == SubTaskStatus.COMPLETED:
+                        state = await self.verifier.verify(state, next_task)
+
+                        if next_task.status == SubTaskStatus.COMPLETED:
+                            # Verified OK – inject any new sub-tasks emitted by this task
+                            state = self._inject_new_tasks(state, next_task)
+                        elif next_task.status == SubTaskStatus.RETRY:
+                            # Verification failed – immediately replan so the task
+                            # is PENDING again and will be dispatched next iteration
+                            state = await self.planner.replan(state, next_task)
+                    # If execution itself raised an exception, task.status is FAILED –
+                    # fall through and let the all-done check handle it.
+
                 else:
-                    # All tasks either completed or failed
+                    # No pending task with satisfied deps available right now
                     if self._all_tasks_done(state):
-                        if self._any_failed(state):
-                            state.status = RequestStatus.FAILED
-                        else:
-                            state.status = RequestStatus.COMPLETED
-                    # else still waiting – save checkpoint and exit
+                        state.status = (
+                            RequestStatus.COMPLETED
+                            if not self._any_failed(state)
+                            else RequestStatus.FAILED
+                        )
                     else:
+                        # Some tasks are still running (async callbacks) or waiting
+                        # for deps that haven't completed yet – save and exit.
                         self.checkpoint.save(state)
                         return
-
-            elif state.status == RequestStatus.RETRY:
-                retry_task = next(
-                    (t for t in state.sub_tasks if t.status == SubTaskStatus.RETRY),
-                    None,
-                )
-                if retry_task:
-                    state = await self.planner.replan(state, retry_task)
-                state.status = RequestStatus.WAITING
 
             elif state.status in (RequestStatus.COMPLETED, RequestStatus.FAILED):
                 break
@@ -104,7 +102,15 @@ class Orchestrator:
 
     # ------------------------------------------------------------------
     # Dynamic task injection (Plan A – LangChain-style flexibility)
+    # 动态添加任务（Plan A – 类似 LangChain 的灵活性）
     # ------------------------------------------------------------------
+
+    def _deps_satisfied(self, task: SubTask, state: OrchestratorState) -> bool:
+        """Return True if all dependencies of *task* are verified and in completed_results."""
+        for dep_id in task.depends_on:
+            if dep_id not in state.completed_results:
+                return False
+        return True
 
     def _inject_new_tasks(
         self, state: OrchestratorState, completed_task: SubTask
@@ -140,6 +146,7 @@ class Orchestrator:
             logger.info(
                 "Injected %d new sub-tasks from %s", injected, completed_task.sub_task_id
             )
+        state.status_history.append("# 准备就绪")
         return state
 
     # ------------------------------------------------------------------
@@ -160,10 +167,21 @@ class Orchestrator:
         logger.info(
             "Request %s finalized with status %s", state.request_id, state.status
         )
+        # Write request-end entry to LLM audit log.
+        try:
+            from app.services import llm_logger
+            llm_logger.log_request_end(
+                request_id=state.request_id,
+                status=str(state.status),
+                error_log=state.error_log,
+            )
+        except Exception:  # pragma: no cover
+            pass
 
     def _assemble_result(self, state: OrchestratorState) -> dict:
         return {
             "request_id": state.request_id,
+            "session_id": state.session_id,
             "status": state.status,
             "results": state.completed_results,
             "error_log": state.error_log,

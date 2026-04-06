@@ -22,6 +22,8 @@
 10. [典型开发场景示例](#10-典型开发场景示例)
 11. [request_type 速查表](#11-request_type-速查表)
 12. [环境变量与部署](#12-环境变量与部署)
+13. [GET /api/result 所有情况的完整 JSON 结构](#13-get-apiresult-所有情况的完整-json-结构)
+14. [傻瓜式任务操作指南](#14-傻瓜式任务操作指南)
 
 ---
 
@@ -234,7 +236,7 @@ Authorization: Bearer <access_token>
 ```json
 // Request 通用字段
 {
-  "session_id": "session_abc123",    // 可选，不传则自动生成
+  "session_id": "session_abc123",    // 必须包含此字段；传空字符串 "" 则服务端自动生成 ID
   "request_type": "attempt",         // 见 §11 request_type 速查表
   // ...各 request_type 专属字段
 }
@@ -262,21 +264,24 @@ Authorization: Bearer <access_token>
 // 处理中
 { "request_id": "req_...", "status": "processing" }
 
-// 完成
+// 完成（always 包含 error_log，成功时为空数组）
 {
   "request_id": "req_...",
+  "session_id": "session_...",
   "status": "completed",
   "results": {
     "sub_001": {
       // 根据 request_type 不同，results 结构不同，详见各场景示例
     }
-  }
+  },
+  "error_log": []
 }
 
 // 失败
 {
   "request_id": "req_...",
   "status": "failed",
+  "results": {},
   "error_log": ["错误原因..."]
 }
 
@@ -855,19 +860,23 @@ await post('/api/attempt', {
 
 | request_type | 用途 | 必填字段 | 可选字段 |
 |-------------|------|---------|---------|
-| `attempt` | 提交答题，触发错因分析 | `paragraph`, `question_text`, `options`, `user_answer`, `correct_answer` | `time_spent`, `question_number` |
-| `corpus` | 生成单篇文章 | – | `difficulty`(L1-L4), `genre`, `topic`, `word_count`, `reference_id` |
-| `question` | 为文章出题 | `article` | `question_type`, `question_types`, `difficulty`, `count` |
-| `qa` | 问答（查词/句/语法/翻译/自由） | `query_type`, `content` | `context_sentence` |
-| `training_set` | 生成完整训练题组（4篇文章+题目） | – | `user_level`(L1-L4) |
+| `attempt` | 提交答题，触发错因分析 | `session_id`, `paragraph`, `question_text`, `options`, `user_answer`, `correct_answer` | `time_spent`, `question_number` |
+| `corpus` | 生成单篇文章 | `session_id` | `difficulty`(L1-L4), `genre`, `topic`, `word_count`, `reference_id` |
+| `question` | 为文章出题 | `session_id`, `article` | `question_type`(单题型), `difficulty`, `count` |
+| `qa` | 问答（查词/句/语法/翻译/自由） | `session_id`, `query_type`, `content` | `context_sentence` |
+| `training_set` | 生成完整训练题组（4篇文章+题目） | `session_id` | `user_level`(L1-L4) |
+
+> **关于 `session_id`：** JSON body 中**必须包含该字段**（声明为 `str` 无默认值，不传则 HTTP 422）。传空字符串 `""` 时服务端自动生成随机 ID，但之后无法通过 Session API 找回该会话；建议传有意义的固定字符串。
+
+> **⚠️ 关于 `question_types`（列表）：** 规则 Planner 只转发 `question_type`（单个字符串）给 QuestionExpert；`question_types`（字符串列表）**不会被规则 Planner 转发**，仅 LLM Planner 在线上可能识别。若需准确控制题型，请使用 `question_type` + `count` 组合。
 
 ### request_type = `qa` 的 query_type 说明
 
 | query_type | 功能 | content 填什么 |
 |-----------|------|--------------|
-| `word` | 查词义 | 单词 |
+| `word` | 查词义 | 单词（如 `biodegradable`） |
 | `sentence` | 长难句拆解 | 英语句子 |
-| `grammar` | 语法解释 | 语法问题描述 |
+| `grammar` | 语法解释 | 语法问题描述（中文或英文） |
 | `translate` | 翻译英文 | 英文文本 |
 | `free` | 自由问答（支持工具调用） | 任意问题 |
 
@@ -898,3 +907,834 @@ uvicorn app.main:app --reload --port 8000
 ---
 
 *本文档对应 ReadWise AI v0.2.0，如有 API 变更请同步更新此文档。*
+
+---
+
+## 13. GET /api/result 所有情况的完整 JSON 结构
+
+> 本节根据源码逐行分析，给出 `GET /api/result/{request_id}` 在所有 `request_type` + `query_type` 组合下的精确返回结构。
+
+---
+
+### 13.0 通用外壳（所有情况）
+
+**处理中（轮询未完成）：**
+```json
+{
+  "request_id": "req_a3f7c9b12d4e",
+  "status": "processing"
+}
+```
+
+**完成（`_assemble_result` 固定格式，error_log 始终存在）：**
+```json
+{
+  "request_id": "req_a3f7c9b12d4e",
+  "session_id": "session_...",
+  "status": "completed",
+  "results": { /* 见下方各 request_type 的 results 结构 */ },
+  "error_log": []
+}
+```
+
+**失败：**
+```json
+{
+  "request_id": "req_a3f7c9b12d4e",
+  "status": "failed",
+  "results": {},
+  "error_log": ["任务sub_001验收失败: [...]", "任务sub_001最终失败"]
+}
+```
+
+**未找到：**
+```json
+{ "status": "not_found" }
+```
+
+---
+
+### 13.1 request_type = `attempt`（错题诊断）
+
+**Planner 生成：** 1个子任务 `sub_001`，交给 `diagnosis_expert`
+
+**情况 A：user_answer ≠ correct_answer（有错误）**
+```json
+{
+  "results": {
+    "sub_001": {
+      "diagnosis": {
+        "error_category": "词汇理解 | 推理判断 | 细节查找 | 主旨理解 | 其他",
+        "explanation": "该题考查深层推理，学生选了细节答案...",
+        "evidence_sentence": "Scientists have found that...",
+        "suggestion": "建议加强推理题解题逻辑训练",
+        "confidence": 0.92
+      },
+      "similar_question": {
+        "paragraph": "新的阅读段落（英文，100-150词）",
+        "question": "题目",
+        "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+        "correct_answer": "B",
+        "explanation": "答案解析"
+      },
+      "metadata": {
+        "latency_ms": 2100,
+        "agent": "diagnosis_expert"
+      }
+    }
+  },
+  "error_log": []
+}
+```
+
+**情况 B：user_answer == correct_answer（答对了，diagnosis 返回无错误，similar_question 仍会生成）**
+```json
+{
+  "results": {
+    "sub_001": {
+      "diagnosis": {
+        "error_category": "无错误",
+        "explanation": "学生答案正确",
+        "evidence_sentence": "",
+        "suggestion": "",
+        "confidence": 1.0
+      },
+      "similar_question": {
+        "paragraph": "...",
+        "question": "...",
+        "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+        "correct_answer": "A",
+        "explanation": "..."
+      },
+      "metadata": { "latency_ms": 1800, "agent": "diagnosis_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+**情况 C：LLM 不可用（fallback）**
+```json
+{
+  "results": {
+    "sub_001": {
+      "diagnosis": {
+        "error_category": "未知",
+        "explanation": "分析失败，请重试",
+        "evidence_sentence": "",
+        "suggestion": "",
+        "confidence": 0.0
+      },
+      "similar_question": {},
+      "metadata": { "latency_ms": 500, "agent": "diagnosis_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+---
+
+### 13.2 request_type = `corpus`（文章生成）
+
+**Planner 生成：** 1个子任务 `sub_001`，交给 `corpus_expert`
+
+**情况 A：生成成功（validation.passed = true）**
+```json
+{
+  "results": {
+    "sub_001": {
+      "article": {
+        "title": "The Future of Renewable Energy",
+        "content": "As the world faces pressing environmental challenges...",
+        "word_count": 312,
+        "difficulty_actual": "L2",
+        "genre_actual": "expository",
+        "key_vocabulary": ["renewable", "sustainable", "emission"],
+        "grammar_highlights": ["被动语态", "定语从句"]
+      },
+      "validation": { "passed": true, "issues": [] },
+      "metadata": {
+        "attempts": 1,
+        "latency_ms": 3200,
+        "agent": "corpus_expert",
+        "reference_id": null
+      }
+    }
+  },
+  "error_log": []
+}
+```
+
+**情况 B：风格化模式（传入 reference_id）- 成功**
+```json
+{
+  "results": {
+    "sub_001": {
+      "article": { "title": "...", "content": "...", "word_count": 305, ... },
+      "validation": { "passed": true, "issues": [] },
+      "metadata": {
+        "attempts": 1,
+        "latency_ms": 3800,
+        "agent": "corpus_expert",
+        "reference_id": "gk_2024_001"
+      }
+    }
+  },
+  "error_log": []
+}
+```
+
+**情况 C：验证失败（词数不足/无标题，3次尝试后仍失败）**
+```json
+{
+  "results": {
+    "sub_001": {
+      "article": { "title": "", "content": "Short text...", "word_count": 30 },
+      "validation": { "passed": false, "issues": ["字数太少: 30"] },
+      "metadata": {
+        "attempts": 3,
+        "partial": true,
+        "latency_ms": 9500,
+        "agent": "corpus_expert",
+        "reference_id": null
+      }
+    }
+  },
+  "error_log": []
+}
+```
+
+---
+
+### 13.3 request_type = `question`（出题）
+
+**Planner 生成：** 1个子任务 `sub_001`，交给 `question_expert`
+
+> **注意：** 规则 Planner 将 AttemptRequest 中的 `question_type`（单值）转发给 QuestionExpert；`question_types`（列表）不会被规则 Planner 转发。QuestionExpert 的 `count` 默认为 3，默认题型顺序为 `["detail", "inference", "vocabulary", "main_idea"]` 截取前 count 个。
+
+**情况 A：成功**
+```json
+{
+  "results": {
+    "sub_001": {
+      "questions": [
+        {
+          "question_text": "What is the main idea of the passage?",
+          "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+          "correct_answer": "C",
+          "explanation": "文章第一段明确指出...",
+          "evidence": "The primary goal of the program is...",
+          "type": "detail"
+        },
+        {
+          "question_text": "What can be inferred from paragraph 2?",
+          "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+          "correct_answer": "A",
+          "explanation": "根据推断...",
+          "evidence": "Despite the challenges...",
+          "type": "inference"
+        },
+        {
+          "question_text": "The word 'sustainable' in line 3 most nearly means...",
+          "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+          "correct_answer": "B",
+          "explanation": "结合上下文...",
+          "evidence": "sustainable development goals...",
+          "type": "vocabulary"
+        }
+      ],
+      "metadata": {
+        "latency_ms": 1800,
+        "agent": "question_expert",
+        "count": 3
+      }
+    }
+  },
+  "error_log": []
+}
+```
+
+**情况 B：LLM 失败（fallback，生成空题目 stub）**
+```json
+{
+  "results": {
+    "sub_001": {
+      "questions": [
+        {
+          "question_text": "",
+          "options": { "A": "", "B": "", "C": "", "D": "" },
+          "correct_answer": "A",
+          "explanation": "",
+          "evidence": "",
+          "type": "detail"
+        }
+      ],
+      "metadata": { "latency_ms": 500, "agent": "question_expert", "count": 1 }
+    }
+  },
+  "error_log": []
+}
+```
+
+---
+
+### 13.4 request_type = `qa`（问答）
+
+**Planner 生成：** 1个子任务 `sub_001`，交给 `qa_expert`
+
+所有 qa 结果都在顶层包含 `metadata: {latency_ms, agent: "qa_expert"}`。
+
+#### query_type = `word`（查词）
+
+**无 context_sentence（仅基础释义）：**
+```json
+{
+  "results": {
+    "sub_001": {
+      "word": "biodegradable",
+      "basic_meaning": {
+        "word": "biodegradable",
+        "translation": "可生物降解的",
+        "success": true
+      },
+      "metadata": { "latency_ms": 800, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+**有 context_sentence（基础释义 + 上下文含义）：**
+```json
+{
+  "results": {
+    "sub_001": {
+      "word": "biodegradable",
+      "basic_meaning": {
+        "word": "biodegradable",
+        "translation": "可生物降解的",
+        "success": true
+      },
+      "context_meaning": "在文中指能被自然环境中的微生物分解的材料",
+      "usage_notes": "常用于环保议题，强调对自然无害",
+      "metadata": { "latency_ms": 1200, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+**无 API Key（stub 模式）：**
+```json
+{
+  "results": {
+    "sub_001": {
+      "word": "biodegradable",
+      "basic_meaning": {
+        "word": "biodegradable",
+        "definitions": ["[模拟] biodegradable: 请配置 API 密钥"],
+        "success": false
+      },
+      "metadata": { "latency_ms": 300, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+#### query_type = `sentence`（长难句拆解）
+
+```json
+{
+  "results": {
+    "sub_001": {
+      "main_clause": "scientists could not understand the mechanism",
+      "subordinate_clauses": [
+        "Not until the 20th century（时间状语从句）",
+        "that governs memory formation（定语从句）"
+      ],
+      "translation": "直到20世纪，科学家才完全理解支配记忆形成的机制。",
+      "structure_analysis": "倒装句型：否定状语提前导致主谓倒装",
+      "key_grammar_points": ["否定副词引导的完全倒装", "定语从句"],
+      "metadata": { "latency_ms": 1500, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+#### query_type = `grammar`（语法解释）
+
+```json
+{
+  "results": {
+    "sub_001": {
+      "grammar_point": "倒装句（Inversion）",
+      "explanation": "否定副词（never, not until, seldom 等）置于句首时，后接倒装语序...",
+      "examples": [
+        "Never have I seen such a beautiful sunset.",
+        "Not until he arrived did we start the meeting."
+      ],
+      "common_mistakes": [
+        "将 did 遗漏：Not until he arrived we started...",
+        "忽略倒装：Never I have seen..."
+      ],
+      "metadata": { "latency_ms": 1300, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+#### query_type = `translate`（翻译）
+
+```json
+{
+  "results": {
+    "sub_001": {
+      "translation": "尽管面临重重挑战，科研人员仍坚定地推进可再生能源领域的探索。",
+      "notes": "despite 引导让步状语，persevered 译为"坚定推进"更符合中文表达习惯",
+      "metadata": { "latency_ms": 1100, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+#### query_type = `free`（自由问答）
+
+**有记忆上下文（LangChain 工具调用）：**
+```json
+{
+  "results": {
+    "sub_001": {
+      "answer": "根据你当前阅读的文章，第三段主要讲述了...你之前在主旨题上的错误率较高，建议...",
+      "references": [
+        "[get_current_article]: {\"title\": \"Ocean Plastic...\", \"content\": \"...\"}",
+        "[get_mistake_summary]: 主旨理解类错题共5道..."
+      ],
+      "tool_calls_made": 2,
+      "metadata": { "latency_ms": 4500, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+**无记忆上下文（简单 LLM 调用）：**
+```json
+{
+  "results": {
+    "sub_001": {
+      "answer": "高考英语阅读理解主旨题的解题技巧是...",
+      "references": [],
+      "follow_up": "你想了解具体的题型练习方法吗？",
+      "metadata": { "latency_ms": 2000, "agent": "qa_expert" }
+    }
+  },
+  "error_log": []
+}
+```
+
+---
+
+### 13.5 request_type = `training_set`（完整训练题组）
+
+**Planner 生成：** 1个种子任务 `sub_000`（corpus_expert 规划模式），完成后动态注入 8个子任务
+
+**results 中包含的键：**
+- `sub_000`：规划任务结果
+- `dyn_c1` ~ `dyn_c4`：4篇文章（corpus_expert）
+- `dyn_q1` ~ `dyn_q4`：4组题目（question_expert，每组4题）
+
+```json
+{
+  "results": {
+    "sub_000": {
+      "training_plan": [
+        {
+          "idx": 1,
+          "topic": "海洋塑料污染",
+          "reference_id": "gk_2024_001",
+          "grammar_points": ["定语从句", "状语从句"],
+          "difficulty": "L2",
+          "word_count": 280,
+          "genre": "expository",
+          "description": "关于海洋塑料污染的说明文，重点考查细节题和推理题"
+        },
+        {
+          "idx": 2,
+          "topic": "人工智能与教育",
+          "reference_id": null,
+          "grammar_points": ["虚拟语气", "非谓语动词"],
+          "difficulty": "L2",
+          "word_count": 300,
+          "genre": "argumentative",
+          "description": "议论AI对教育影响，重点考查主旨题"
+        },
+        {
+          "idx": 3,
+          "topic": "古代丝绸之路",
+          "reference_id": "gk_2023_007",
+          "grammar_points": ["被动语态", "时态"],
+          "difficulty": "L3",
+          "word_count": 320,
+          "genre": "narrative",
+          "description": "记叙文，考查词义题和推理题"
+        },
+        {
+          "idx": 4,
+          "topic": "基因编辑技术",
+          "reference_id": null,
+          "grammar_points": ["倒装句", "强调句"],
+          "difficulty": "L3",
+          "word_count": 340,
+          "genre": "expository",
+          "description": "说明文，全题型覆盖"
+        }
+      ],
+      "new_sub_tasks": [
+        { "sub_task_id": "dyn_c1", "assigned_to": "corpus_expert", "depends_on": [], "..." : "..." },
+        { "sub_task_id": "dyn_q1", "assigned_to": "question_expert", "depends_on": ["dyn_c1"], "..." : "..." }
+      ],
+      "metadata": {
+        "latency_ms": 3000,
+        "agent": "corpus_expert",
+        "mode": "planning"
+      }
+    },
+    "dyn_c1": {
+      "article": {
+        "title": "The Ocean's Silent Crisis",
+        "content": "Every year, millions of tons of plastic...",
+        "word_count": 285,
+        "difficulty_actual": "L2",
+        "genre_actual": "expository",
+        "key_vocabulary": ["microplastics", "biodegradable", "contamination"],
+        "grammar_highlights": ["定语从句", "状语从句"]
+      },
+      "validation": { "passed": true, "issues": [] },
+      "metadata": { "attempts": 1, "latency_ms": 2800, "agent": "corpus_expert", "reference_id": "gk_2024_001" }
+    },
+    "dyn_q1": {
+      "questions": [
+        { "question_text": "...", "options": {"A":"...","B":"...","C":"...","D":"..."}, "correct_answer": "B", "explanation": "...", "evidence": "...", "type": "detail" },
+        { "question_text": "...", "options": {"A":"...","B":"...","C":"...","D":"..."}, "correct_answer": "C", "explanation": "...", "evidence": "...", "type": "inference" },
+        { "question_text": "...", "options": {"A":"...","B":"...","C":"...","D":"..."}, "correct_answer": "A", "explanation": "...", "evidence": "...", "type": "vocabulary" },
+        { "question_text": "...", "options": {"A":"...","B":"...","C":"...","D":"..."}, "correct_answer": "D", "explanation": "...", "evidence": "...", "type": "main_idea" }
+      ],
+      "metadata": { "latency_ms": 1900, "agent": "question_expert", "count": 4 }
+    },
+    "dyn_c2": { "article": { "..." : "..." }, "validation": {"..."}, "metadata": {"..."} },
+    "dyn_q2": { "questions": ["..."], "metadata": {"..."} },
+    "dyn_c3": { "article": { "..." : "..." }, "validation": {"..."}, "metadata": {"..."} },
+    "dyn_q3": { "questions": ["..."], "metadata": {"..."} },
+    "dyn_c4": { "article": { "..." : "..." }, "validation": {"..."}, "metadata": {"..."} },
+    "dyn_q4": { "questions": ["..."], "metadata": {"..."} }
+  },
+  "error_log": []
+}
+```
+
+> **注意：** `sub_000.new_sub_tasks` 字段包含 Orchestrator 注入的 8 个子任务的完整 SubTask dict 列表，前端通常不需要读取这个字段（已由后端自动处理），但它确实存在于 results 中。
+
+---
+
+## 14. 傻瓜式任务操作指南
+
+> 这里按任务类型，给出最简单的"复制-改改-用"模板。
+
+---
+
+### 任务一：提交一道答错的题，获取错因分析和同类题
+
+**第一步：发送请求**
+```http
+POST /api/attempt
+Authorization: Bearer <你的 token>
+Content-Type: application/json
+
+{
+  "request_type": "attempt",
+  "session_id": "我的学习会话001",
+  "paragraph": "Scientists have discovered that regular exercise...",
+  "question_text": "What is the main purpose of the passage?",
+  "options": {
+    "A": "To prove that exercise is harmful",
+    "B": "To explain the benefits of regular exercise",
+    "C": "To compare different sports",
+    "D": "To describe a scientific experiment"
+  },
+  "user_answer": "A",
+  "correct_answer": "B",
+  "time_spent": 45,
+  "question_number": "A1"
+}
+```
+
+**第二步：拿到 request_id，开始轮询**
+```http
+GET /api/result/req_xxxxxxxxx
+Authorization: Bearer <你的 token>
+```
+
+每隔 2-3 秒轮询一次，直到 status 不是 "processing"。
+
+**第三步：读取结果**
+```
+result.results.sub_001.diagnosis.error_category   → 错误类型
+result.results.sub_001.diagnosis.explanation      → 错因分析
+result.results.sub_001.diagnosis.evidence_sentence → 原文证据
+result.results.sub_001.diagnosis.suggestion       → 学习建议
+result.results.sub_001.similar_question           → 同类练习题
+```
+
+---
+
+### 任务二：生成一篇文章
+
+**第一步：发送请求**
+```http
+POST /api/attempt
+Authorization: Bearer <你的 token>
+Content-Type: application/json
+
+{
+  "request_type": "corpus",
+  "session_id": "我的训练会话002",
+  "difficulty": "L2",
+  "genre": "expository",
+  "topic": "人工智能在医疗领域的应用",
+  "word_count": 300
+}
+```
+
+**第三步：读取结果**
+```
+result.results.sub_001.article.title     → 文章标题
+result.results.sub_001.article.content   → 文章正文
+result.results.sub_001.article.word_count → 实际字数
+result.results.sub_001.validation.passed  → 是否通过验证
+```
+
+---
+
+### 任务三：为一篇文章出题
+
+**第一步：发送请求**
+```http
+POST /api/attempt
+Authorization: Bearer <你的 token>
+Content-Type: application/json
+
+{
+  "request_type": "question",
+  "session_id": "我的训练会话002",
+  "article": "Scientists have discovered that...",
+  "difficulty": "L2",
+  "question_type": "inference",
+  "count": 3
+}
+```
+
+**第三步：读取结果**
+```
+result.results.sub_001.questions          → 题目数组
+result.results.sub_001.questions[0].question_text → 题干
+result.results.sub_001.questions[0].options       → 选项 A/B/C/D
+result.results.sub_001.questions[0].correct_answer → 正确答案
+result.results.sub_001.questions[0].explanation   → 解析
+```
+
+---
+
+### 任务四：查一个单词
+
+**第一步：发送请求**
+```http
+POST /api/attempt
+Authorization: Bearer <你的 token>
+Content-Type: application/json
+
+{
+  "request_type": "qa",
+  "session_id": "我的聊天会话003",
+  "query_type": "word",
+  "content": "biodegradable",
+  "context_sentence": "Companies are developing biodegradable packaging materials."
+}
+```
+
+**第三步：读取结果**
+```
+result.results.sub_001.word          → 查的单词
+result.results.sub_001.basic_meaning → 词典释义
+result.results.sub_001.context_meaning → 在句子中的具体含义（有传 context_sentence 时才有）
+result.results.sub_001.usage_notes   → 用法注意事项（有传 context_sentence 时才有）
+```
+
+---
+
+### 任务五：拆解一个长难句
+
+```http
+{
+  "request_type": "qa",
+  "session_id": "我的聊天会话003",
+  "query_type": "sentence",
+  "content": "Not until the 20th century did scientists fully understand the mechanism that governs memory formation."
+}
+```
+
+**读取结果：**
+```
+result.results.sub_001.main_clause           → 主句
+result.results.sub_001.subordinate_clauses   → 从句列表
+result.results.sub_001.translation           → 中文翻译
+result.results.sub_001.structure_analysis    → 句子结构分析
+result.results.sub_001.key_grammar_points    → 语法点列表
+```
+
+---
+
+### 任务六：解释一个语法现象
+
+```http
+{
+  "request_type": "qa",
+  "session_id": "我的聊天会话003",
+  "query_type": "grammar",
+  "content": "倒装句的分类和使用场景"
+}
+```
+
+**读取结果：**
+```
+result.results.sub_001.grammar_point    → 语法点名称
+result.results.sub_001.explanation      → 详细解释
+result.results.sub_001.examples         → 例句列表
+result.results.sub_001.common_mistakes  → 常见错误
+```
+
+---
+
+### 任务七：翻译一段英文
+
+```http
+{
+  "request_type": "qa",
+  "session_id": "我的聊天会话003",
+  "query_type": "translate",
+  "content": "Despite numerous setbacks, the researchers persevered in their pursuit of renewable energy solutions."
+}
+```
+
+**读取结果：**
+```
+result.results.sub_001.translation → 中文翻译
+result.results.sub_001.notes       → 翻译说明（可能为空）
+```
+
+---
+
+### 任务八：自由提问（AI 会自动查阅记忆）
+
+```http
+{
+  "request_type": "qa",
+  "session_id": "我的聊天会话003",
+  "query_type": "free",
+  "content": "我最近在主旨题上老是出错，能帮我分析一下原因并给出改进建议吗？"
+}
+```
+
+**读取结果：**
+```
+result.results.sub_001.answer          → AI 回答
+result.results.sub_001.references      → AI 查阅了哪些记忆（列表）
+result.results.sub_001.tool_calls_made → 调用了几次工具
+```
+
+---
+
+### 任务九：生成完整训练题组（4篇文章+16道题）
+
+> 耗时最长，通常需要 30-90 秒，请耐心等待。
+
+**第一步：发送请求**
+```http
+POST /api/attempt
+Authorization: Bearer <你的 token>
+Content-Type: application/json
+
+{
+  "request_type": "training_set",
+  "session_id": "我的训练会话004",
+  "user_level": "L2"
+}
+```
+
+**第三步：读取结果**
+```
+result.results.sub_000.training_plan    → 4篇文章的规划（topic/difficulty/genre/...）
+result.results.dyn_c1.article           → 第1篇文章
+result.results.dyn_q1.questions         → 第1篇文章的4道题
+result.results.dyn_c2.article           → 第2篇文章
+result.results.dyn_q2.questions         → 第2篇文章的4道题
+result.results.dyn_c3.article           → 第3篇文章
+result.results.dyn_q3.questions         → 第3篇文章的4道题
+result.results.dyn_c4.article           → 第4篇文章
+result.results.dyn_q4.questions         → 第4篇文章的4道题
+```
+
+---
+
+### 通用轮询代码模板（JavaScript）
+
+```javascript
+async function submitAndPoll(requestBody, token, maxWaitSeconds = 120) {
+  // 第一步：提交请求
+  const submitRes = await fetch('/api/attempt', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestBody)
+  });
+  const { request_id } = await submitRes.json();
+
+  // 第二步：轮询（最多等 maxWaitSeconds 秒）
+  const maxAttempts = Math.ceil(maxWaitSeconds / 3);
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000)); // 每 3s 轮询一次
+    const pollRes = await fetch(`/api/result/${request_id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await pollRes.json();
+
+    if (data.status === 'completed') return data;     // 成功
+    if (data.status === 'failed') throw new Error(`AI 处理失败: ${data.error_log?.join(', ')}`);
+    if (data.status === 'not_found') throw new Error('请求已过期，请重新提交');
+    // 'processing' → 继续等待
+  }
+  throw new Error(`等待超时（>${maxWaitSeconds}s），请稍后再试`);
+}
+
+// 使用示例
+const result = await submitAndPoll({
+  request_type: 'attempt',
+  session_id: 'my_session',
+  paragraph: '...',
+  question_text: '...',
+  options: { A: '...', B: '...', C: '...', D: '...' },
+  user_answer: 'A',
+  correct_answer: 'B',
+  time_spent: 45
+}, myToken);
+
+const diagnosis = result.results.sub_001.diagnosis;
+console.log('错误类型:', diagnosis.error_category);
+console.log('错因分析:', diagnosis.explanation);
+```

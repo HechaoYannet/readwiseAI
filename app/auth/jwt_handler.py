@@ -1,11 +1,13 @@
 """JWT生成与验证."""
 from __future__ import annotations
 import logging
+from dotenv import load_dotenv
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import jwt
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 _SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")

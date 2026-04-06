@@ -79,14 +79,14 @@ $power_summary
 {{
   "articles": [
     {{
-      "idx": 1,
-      "topic": "环境保护",
+      "idx": 1, //按顺序编号；与题库中"section"的对应关系：第1篇文章对应 Section A，第2篇对应 Section B，以此类推
+      "topic": "", //根据高考真题常见主题决定，例如：科技与人文传承
       "reference_id": "gk_2024_001",
-      "grammar_points": ["定语从句", "状语从句"],
-      "difficulty": "L2",
-      "word_count": 280,
-      "genre": "expository",
-      "description": "关于海洋塑料污染的说明文，重点考查细节题和推理题"
+      "grammar_points": [], //可选：三大从句（尤其定语从句、名词性从句）、非谓语动词、时态语态、倒装强调句、动作逻辑
+      "difficulty": "", //L1/L2/L3/L4
+      "word_count": "", //根据难度、参考真题和学生情况灵活调整，通常在250-500词之间
+      "genre": "", //argumentative/expository/narrative
+      "description": "" //出题描述，例如：关于海洋塑料污染的说明文，重点考查细节题和推理题
     }}
   ]
 }}
@@ -155,10 +155,10 @@ def _build_training_sub_tasks(training_plan: List[Dict[str, Any]]) -> List[Dict[
             "input": {
                 "article_task_id": corpus_id,  # resolved by dispatcher at runtime
                 "difficulty": spec.get("difficulty", "L2"),
-                "count": 4,
-                "question_types": ["detail", "inference", "vocabulary", "main_idea"],
+                "count": 4, # 或根据语料调整题目数量
+                "question_types": [], #自己决定
             },
-            "acceptance_criteria": ["题目数量等于4"],
+            "acceptance_criteria": [],
             "depends_on": [corpus_id],
         })
 
@@ -170,7 +170,7 @@ class CorpusExpert(BaseSubAgent):
     description = "高考风格文章生成（支持总体规划 / 风格化生成 / 工作记忆同步）"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any],state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: "OrchestratorState | None" = None
     ) -> Dict[str, Any]:
         start = time.time()
 
@@ -194,7 +194,7 @@ class CorpusExpert(BaseSubAgent):
         # Build style reference block
         style_reference = self._get_style_reference(reference_id, context)
         if grammar_points:
-            style_reference += f"\n重点语法点：{', '.join(grammar_points)}"
+            style_reference += f"\n\n## 重点语法点：{', '.join(grammar_points)}"
 
         # Load prompt template from file; fall back to inline template
         template = self.load_prompt("corpus_prompt") or ARTICLE_PROMPT
@@ -210,8 +210,10 @@ class CorpusExpert(BaseSubAgent):
                 topic=topic,
                 word_count=word_count,
                 style_reference=style_reference or "（无特定风格参考）",
-                description=description or "（无特定出题描述）",
+                description=(description or "（无特定出题描述）") + validation.get("issues", []).__str__()
             )
+            if state is not None:
+                state.status_history.append(f"# 正在撰写文章")
             article = await self._call_llm(prompt)
             if not article:
                 article = {"title": "", "content": "", "word_count": 0}
@@ -255,7 +257,7 @@ class CorpusExpert(BaseSubAgent):
     # ------------------------------------------------------------------
 
     async def _run_planning_mode(
-        self, context: Dict[str, Any], start: float, state: OrchestratorState
+            self, context: Dict[str, Any], start: float, state: OrchestratorState
     ) -> Dict[str, Any]:
         """Read corpus + user data, generate a 4-article training plan."""
         # 1. Corpus index
@@ -296,6 +298,8 @@ class CorpusExpert(BaseSubAgent):
             power_summary=power_summary,
         )
 
+        if state is not None:
+            state.status_history.append(f"# 正在规划训练方案")
         plan_result = await self._call_llm(prompt)
         training_plan: List[Dict[str, Any]] = []
         if plan_result and isinstance(plan_result.get("articles"), list):
@@ -304,7 +308,7 @@ class CorpusExpert(BaseSubAgent):
         # Build new sub-tasks for dynamic injection by the Orchestrator
         new_sub_tasks = _build_training_sub_tasks(training_plan)
 
-        res= {
+        res = {
             "training_plan": training_plan,
             "new_sub_tasks": new_sub_tasks,
             "metadata": {
@@ -313,8 +317,9 @@ class CorpusExpert(BaseSubAgent):
                 "mode": "planning",
             },
         }
-        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
-        wm.add_agent_information({"corpus_expert_planning": res})
+        if state is not None:
+            wm = working_memory.WorkingMemory(session_id=state.session_id or "", user_id=state.user_id)
+            wm.add_agent_information({"corpus_expert_planning": res})
         return res
 
     # ------------------------------------------------------------------
@@ -322,7 +327,7 @@ class CorpusExpert(BaseSubAgent):
     # ------------------------------------------------------------------
 
     def _get_style_reference(
-        self, reference_id: Optional[str], context: Dict[str, Any]
+            self, reference_id: Optional[str], context: Dict[str, Any]
     ) -> str:
         """Load a reference article from the corpus for style guidance."""
         if not reference_id:
@@ -348,7 +353,7 @@ class CorpusExpert(BaseSubAgent):
             return ""
 
     def _sync_working_memory(
-        self, article: Dict[str, Any], context: Dict[str, Any]
+            self, article: Dict[str, Any], context: Dict[str, Any]
     ) -> None:
         """Persist the generated article to the session's working memory."""
         wm = context.get("working_memory")

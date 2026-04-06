@@ -41,8 +41,9 @@ class SubTask(BaseModel):
 class OrchestratorState(BaseModel):
     request_id: str
     user_id: str
-    session_id: str
+    session_id: Optional[str] = None
     status: RequestStatus = RequestStatus.PENDING
+    status_history: List[str] = Field(default_factory=list)
     original_request: Dict[str, Any] = Field(default_factory=dict)
     current_plan: Dict[str, Any] = Field(default_factory=dict)
     sub_tasks: List[SubTask] = Field(default_factory=list)
@@ -76,7 +77,7 @@ class AttemptRequest(BaseModel):
     question_type: Optional[str] = None  # detail/inference/vocabulary/main_idea
     question_types: Optional[List[str]] = None  # list of question types for multi-question
     count: Optional[int] = None
-    session_id: str  # session identifier for working memory
+    session_id: str = ""  # session identifier for working memory
     # Corpus expert extended options
     enable_planning: Optional[bool] = None  # training_set: trigger corpus planning mode
     reference_id: Optional[str] = None  # corpus article ID for stylized generation

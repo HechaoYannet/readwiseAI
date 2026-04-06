@@ -14,8 +14,8 @@ router = APIRouter()
 
 @router.get("/result/{request_id}")
 async def get_result(
-    request_id: str,
-    token_data: TokenData = Depends(get_current_user),
+        request_id: str,
+        token_data: TokenData = Depends(get_current_user),
 ):
     """Poll for the result of a previously submitted request.
 
@@ -46,8 +46,11 @@ async def get_result(
     if state.status == RequestStatus.COMPLETED:
         result = {
             "request_id": request_id,
+            "session_id": state.session_id,
             "status": "completed",
+            "status_history": state.status_history,
             "results": state.completed_results,
+            "error_log": state.error_log,
         }
         checkpoint_manager.save_result(request_id, user_id, result)
         checkpoint_manager.delete(request_id)
@@ -57,7 +60,8 @@ async def get_result(
         return {
             "request_id": request_id,
             "status": "failed",
+            "status_history": state.status_history,
             "error_log": state.error_log,
         }
 
-    return {"request_id": request_id, "status": "processing"}
+    return {"request_id": request_id, "status": state.status, "status_history": state.status_history}

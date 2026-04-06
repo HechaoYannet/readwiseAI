@@ -10,6 +10,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from langchain_core.tools import tool
+from typing_extensions import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,9 @@ _context: Dict[str, Any] = {}
 
 
 def configure_tools(
-    working_memory: Optional[Any] = None,
-    long_term_memory: Optional[Any] = None,
-    corpus_repo: Optional[Any] = None,
+        working_memory: Optional[Any] = None,
+        long_term_memory: Optional[Any] = None,
+        corpus_repo: Optional[Any] = None,
 ) -> None:
     """Inject runtime dependencies into the tool module.
 
@@ -124,15 +125,17 @@ def search_mistakes(keyword: str = "", error_category: str = "", question_type: 
 # ---------------------------------------------------------------------------
 
 @tool
-def search_corpus(difficulty: str = "", genre: str = "") -> str:
+def search_corpus(difficulty: str = "", genre: str = "", section: Literal["A", "B", "C", "D"] | None = None) -> str:
     """搜索高考真题语料库，返回相关文章摘要。
 
     当需要参考真题风格、举例说明高考阅读特点时使用。
-    支持按难度（L1-L4）和体裁（argumentative/expository/narrative）过滤。
+    支持按难度（L1-L4）和体裁（argumentative/expository/narrative）和文章编号（A/B/C/D）过滤。
+    注意：为保证获取信息全面性， **不建议** 指定任何过滤条件，除非明确需要特定文章。
 
     Args:
-        difficulty: 难度等级，L1/L2/L3/L4。
+        difficulty: 难度等级，L1/L2/L3/L4
         genre: 文章体裁，argumentative议论文/expository说明文/narrative记叙文。
+        section: 文章编号，A/B/C/D（可选，提供后返回对应文章，否则返回多篇相关摘要）。
     """
     repo = _context.get("corpus_repo")
     if repo is None:
@@ -144,7 +147,8 @@ def search_corpus(difficulty: str = "", genre: str = "") -> str:
     return repo.format_examples_for_prompt(
         difficulty=difficulty or None,
         genre=genre or None,
-        count=1,
+        section=section or None,
+        count=12,
     )
 
 
@@ -166,20 +170,23 @@ def lookup_word(word: str, context_sentence: str = "") -> str:
     # Use a synchronous stub path when no API key is configured (test/offline mode)
     # and the real async call when running inside an event loop via a thread pool.
     try:
-        from app.tools.dictionary import _stub_definition, _APP_KEY, _APP_SECRET
+        from app.tools.dictionary import APP_KEY, APP_SECRET
 
-        if not _APP_KEY or not _APP_SECRET:
-            result = _stub_definition(word)
+        if not APP_KEY or not APP_SECRET:
+            result = {
+                "translation": [f"[模拟] {word}: 请配置 API 密钥"],
+                "success": False
+            }
         else:
             import asyncio
             from app.tools.dictionary import lookup_word as _dict_lookup
             result = asyncio.run(_dict_lookup(word))
 
-        defs = result.get("definitions", [])
-        phonetic = result.get("phonetic", "")
+        defs = result.get("translation", [])
+        # phonetic = result.get("phonetic", "")
         output = f"**{word}**"
-        if phonetic:
-            output += f" /{phonetic}/"
+        # if phonetic:
+        #     output += f" /{phonetic}/"
         output += "\n" + "\n".join(f"  - {d}" for d in defs)
         if context_sentence:
             output += f"\n\n（上下文：{context_sentence}）"

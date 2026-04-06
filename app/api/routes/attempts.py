@@ -48,6 +48,18 @@ async def submit_attempt(
     checkpoint_manager = get_checkpoint_manager()
     checkpoint_manager.save(state)
 
+    # Log request start to LLM audit log (non-blocking).
+    try:
+        from app.services import llm_logger
+        llm_logger.log_request_start(
+            request_id=request_id,
+            session_id=session_id,
+            user_id=user_id,
+            payload=attempt.model_dump(),
+        )
+    except Exception:
+        pass
+
     orchestrator = get_orchestrator()
     background_tasks.add_task(
         orchestrator.process_request,
