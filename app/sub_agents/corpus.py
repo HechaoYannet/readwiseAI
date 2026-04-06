@@ -170,7 +170,7 @@ class CorpusExpert(BaseSubAgent):
     description = "高考风格文章生成（支持总体规划 / 风格化生成 / 工作记忆同步）"
 
     async def execute(
-            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: "OrchestratorState | None" = None
     ) -> Dict[str, Any]:
         start = time.time()
 
@@ -212,7 +212,8 @@ class CorpusExpert(BaseSubAgent):
                 style_reference=style_reference or "（无特定风格参考）",
                 description=(description or "（无特定出题描述）") + validation.get("issues", []).__str__()
             )
-            state.status_history.append(f"# 正在撰写文章")
+            if state is not None:
+                state.status_history.append(f"# 正在撰写文章")
             article = await self._call_llm(prompt)
             if not article:
                 article = {"title": "", "content": "", "word_count": 0}
@@ -297,7 +298,8 @@ class CorpusExpert(BaseSubAgent):
             power_summary=power_summary,
         )
 
-        state.status_history.append(f"# 正在规划训练方案")
+        if state is not None:
+            state.status_history.append(f"# 正在规划训练方案")
         plan_result = await self._call_llm(prompt)
         training_plan: List[Dict[str, Any]] = []
         if plan_result and isinstance(plan_result.get("articles"), list):
@@ -315,8 +317,9 @@ class CorpusExpert(BaseSubAgent):
                 "mode": "planning",
             },
         }
-        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
-        wm.add_agent_information({"corpus_expert_planning": res})
+        if state is not None:
+            wm = working_memory.WorkingMemory(session_id=state.session_id or "", user_id=state.user_id)
+            wm.add_agent_information({"corpus_expert_planning": res})
         return res
 
     # ------------------------------------------------------------------
