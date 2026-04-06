@@ -182,10 +182,11 @@ def log_llm_call(
         return  # No active request context – skip logging
 
     # Truncate very long prompts/responses to keep logs readable
-    prompt_display = prompt if len(prompt) <= _MAX_PROMPT_PREVIEW else (
-            prompt[_MAX_PROMPT_PREVIEW:] + f"\n… [前半截断, 共 {len(prompt)} 字符]"
+    prompt_display = prompt + f"\n[共 {len(prompt)} 字符]" if len(prompt) <= _MAX_PROMPT_PREVIEW else (
+            prompt[len(prompt) - _MAX_PROMPT_PREVIEW:] + f"\n… [前半截断, 共 {len(prompt)} 字符]"
     )
-    response_display = raw_response if len(raw_response) <= _MAX_OUTPUT_PREVIEW else (
+    response_display = raw_response + f"\n[共 {len(raw_response)} 字符]" if len(
+        raw_response) <= _MAX_OUTPUT_PREVIEW else (
             raw_response[:_MAX_OUTPUT_PREVIEW] + f"\n… [后半截断, 共 {len(raw_response)} 字符]"
     )
 
