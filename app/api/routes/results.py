@@ -62,4 +62,4 @@ async def get_result(
             "error_log": state.error_log,
         }
 
-    return {"request_id": request_id, "status": "processing"}
+    return {"request_id": request_id, "status": state.status_history}

@@ -51,7 +51,9 @@ class Verifier:
                 acceptance_criteria=criteria_text,
                 sub_task_result=str(completed_task.result),
             )
+            state.status_history.append(f"# 智能体正在校验：{completed_task.sub_task_id}")
             verdict = await llm_json_call(prompt)
+            state.status_history.append(f"# {completed_task.sub_task_id} 校验完成")
 
         # If LLM is not available,or no criteria, default to passed so flow continues
         if not verdict:

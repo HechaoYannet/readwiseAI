@@ -99,6 +99,7 @@ class DiagnosisExpert(BaseSubAgent):
             correct_answer=input.get("correct_answer", ""),
             time_spent=input.get("time_spent", 0),
         )
+        state.status_history.append("# 正在分析错因")
         result = await self._call_llm(prompt)
         if not result:
             result = {
@@ -124,6 +125,7 @@ class DiagnosisExpert(BaseSubAgent):
             error_category=diagnosis.get("error_category", ""),
             paragraph_summary=summary,
         )
+        state.status_history.append("# 正在生成同类型题")
         result = await self._call_llm(prompt)
         wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
         wm.add_agent_information({"similar_question": json.dumps(result, ensure_ascii=False, indent=2)})

@@ -43,6 +43,7 @@ class OrchestratorState(BaseModel):
     user_id: str
     session_id: str
     status: RequestStatus = RequestStatus.PENDING
+    status_history: List[str] = Field(default_factory=list)
     original_request: Dict[str, Any] = Field(default_factory=dict)
     current_plan: Dict[str, Any] = Field(default_factory=dict)
     sub_tasks: List[SubTask] = Field(default_factory=list)

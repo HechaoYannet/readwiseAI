@@ -267,6 +267,7 @@ class Planner:
         prompt = Template(ROUTER_DECIDER_PROMPT).substitute(
             user_request=json.dumps(user_request)
         )
+        state.status_history.append("# 智能体正在决策")
         route_decision = await llm_json_call(prompt)
         planning_strategy = route_decision.get("planning_strategy", "llm-based")
 
@@ -299,6 +300,7 @@ class Planner:
                 )
                 plan = _make_rule_based_plan(user_request)
 
+
         if not plan or "sub_tasks" not in plan:
             logger.error("Planner returned empty plan for %s", state.request_id)
             state.error_log.append("Planner failed to generate a plan")
@@ -309,6 +311,7 @@ class Planner:
         logger.info(
             "Planned %d sub-tasks for %s", len(state.sub_tasks), state.request_id
         )
+        state.status_history.append(f"# 智能体决策完成,已规划{len(state.sub_tasks)}个子任务")
         return state
 
     async def replan(
@@ -331,9 +334,11 @@ class Planner:
 
 ## 请输出调整后的输入（严格JSON格式，只输出JSON）
 """
+        state.status_history.append(f"# 智能体正在优化任务 {failed_task.sub_task_id}")
         adjusted = await llm_json_call(prompt)
         if adjusted:
             failed_task.input = adjusted
         failed_task.status = SubTaskStatus.PENDING
         failed_task.retry_count += 1
+        state.status_history.append(f"# {failed_task.sub_task_id}优化结束")
         return state

@@ -144,6 +144,7 @@ class Orchestrator:
             logger.info(
                 "Injected %d new sub-tasks from %s", injected, completed_task.sub_task_id
             )
+        state.status_history.append("# 准备就绪")
         return state
 
     # ------------------------------------------------------------------

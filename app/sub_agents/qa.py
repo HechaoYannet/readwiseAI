@@ -87,6 +87,8 @@ class QAExpert(BaseSubAgent):
         )
         wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
         wm.add_message(role="user", content=content)
+
+        state.status_history.append(f"# 大模型正在分析")
         if query_type == "word":
             result = await self._handle_word(content, context_sentence)
         elif query_type == "sentence":
@@ -104,6 +106,7 @@ class QAExpert(BaseSubAgent):
 
         result["metadata"] = {"latency_ms": self._timed(start), "agent": self.name}
 
+        state.status_history.append(f"# 大模型分析完成")
         wm.add_message(role="assistant", content=str(result))
         return result
 

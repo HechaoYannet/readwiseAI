@@ -71,7 +71,7 @@ class QuestionExpert(BaseSubAgent):
 
         # Fetch corpus examples for style reference
         corpus_examples = self._get_corpus_examples(difficulty, context)
-
+        state.status_history.append("# 正在生成题目")
         questions = await self._generate_questions(
             article=article,
             difficulty=difficulty,

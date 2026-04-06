@@ -212,6 +212,7 @@ class CorpusExpert(BaseSubAgent):
                 style_reference=style_reference or "（无特定风格参考）",
                 description=(description or "（无特定出题描述）") + validation.get("issues", []).__str__()
             )
+            state.status_history.append(f"# 正在撰写文章")
             article = await self._call_llm(prompt)
             if not article:
                 article = {"title": "", "content": "", "word_count": 0}
@@ -296,6 +297,7 @@ class CorpusExpert(BaseSubAgent):
             power_summary=power_summary,
         )
 
+        state.status_history.append(f"# 正在规划训练方案")
         plan_result = await self._call_llm(prompt)
         training_plan: List[Dict[str, Any]] = []
         if plan_result and isinstance(plan_result.get("articles"), list):
