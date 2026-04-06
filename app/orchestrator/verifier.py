@@ -83,6 +83,7 @@ class Verifier:
             )
         else:
             completed_task.status = SubTaskStatus.FAILED
+            state.completed_results[completed_task.sub_task_id] = completed_task.result
             state.error_log.append(
                 f"任务{completed_task.sub_task_id}最终失败"
             )
