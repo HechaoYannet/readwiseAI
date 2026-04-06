@@ -182,11 +182,22 @@ class WorkingMemory(BaseModel):
     # Read helpers
     # ------------------------------------------------------------------
 
-    def get_article_content(self, index: int) -> str:
-        """Return the full text of the current article, or an empty string."""
+    def get_article_content(self, index: int = -1) -> str:
+        """Return the full text of an article by index, or an empty string.
 
+        Args:
+            index: List index of the article (default -1 = most recent).
+        """
+        if not self.articles:
+            return ""
         return self.articles[index].get("content", "")
 
-    def get_article_title(self, index: int) -> str:
-        """Return the title of the current article, or a placeholder."""
+    def get_article_title(self, index: int = -1) -> str:
+        """Return the title of an article by index, or a placeholder.
+
+        Args:
+            index: List index of the article (default -1 = most recent).
+        """
+        if not self.articles:
+            return "（无当前文章）"
         return self.articles[index].get("title", "（无当前文章）")

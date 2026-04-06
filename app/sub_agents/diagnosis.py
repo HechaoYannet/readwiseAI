@@ -60,7 +60,7 @@ class DiagnosisExpert(BaseSubAgent):
     description = "错因分析、同类题生成"
 
     async def execute(
-            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: "OrchestratorState | None" = None
     ) -> Dict[str, Any]:
         start = time.time()
 
@@ -99,7 +99,8 @@ class DiagnosisExpert(BaseSubAgent):
             correct_answer=input.get("correct_answer", ""),
             time_spent=input.get("time_spent", 0),
         )
-        state.status_history.append("# 正在分析错因")
+        if state is not None:
+            state.status_history.append("# 正在分析错因")
         result = await self._call_llm(prompt)
         if not result:
             result = {
@@ -109,15 +110,16 @@ class DiagnosisExpert(BaseSubAgent):
                 "suggestion": "",
                 "confidence": 0.0,
             }
-        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
-        wm.add_agent_information(
-            {f"diagnosis_{state.original_request.get("question_number")}": json.dumps(result,
-                                                                                      ensure_ascii=False,
-                                                                                      indent=2)})
+        if state is not None:
+            wm = working_memory.WorkingMemory(session_id=state.session_id or "", user_id=state.user_id)
+            wm.add_agent_information(
+                {f"diagnosis_{state.original_request.get('question_number')}": json.dumps(result,
+                                                                                          ensure_ascii=False,
+                                                                                          indent=2)})
         return result
 
     async def _generate_similar(
-            self, input: Dict[str, Any], diagnosis: Dict[str, Any], state: OrchestratorState
+            self, input: Dict[str, Any], diagnosis: Dict[str, Any], state: "OrchestratorState | None"
     ) -> Dict[str, Any]:
         paragraph = input.get("paragraph", "")
         summary = paragraph[:100] if paragraph else "英语阅读理解"
@@ -125,8 +127,10 @@ class DiagnosisExpert(BaseSubAgent):
             error_category=diagnosis.get("error_category", ""),
             paragraph_summary=summary,
         )
-        state.status_history.append("# 正在生成同类型题")
+        if state is not None:
+            state.status_history.append("# 正在生成同类型题")
         result = await self._call_llm(prompt)
-        wm = working_memory.WorkingMemory(session_id=state.session_id, user_id=state.user_id)
-        wm.add_agent_information({"similar_question": json.dumps(result, ensure_ascii=False, indent=2)})
+        if state is not None:
+            wm = working_memory.WorkingMemory(session_id=state.session_id or "", user_id=state.user_id)
+            wm.add_agent_information({"similar_question": json.dumps(result, ensure_ascii=False, indent=2)})
         return result or {}

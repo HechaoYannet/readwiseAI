@@ -50,7 +50,7 @@ class QuestionExpert(BaseSubAgent):
     description = "题目生成、选项设计（支持连续出题）"
 
     async def execute(
-            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: "OrchestratorState | None" = None
     ) -> Dict[str, Any]:
         start = time.time()
         article = input.get("article", "")
@@ -71,7 +71,8 @@ class QuestionExpert(BaseSubAgent):
 
         # Fetch corpus examples for style reference
         corpus_examples = self._get_corpus_examples(difficulty, context)
-        state.status_history.append("# 正在生成题目")
+        if state is not None:
+            state.status_history.append("# 正在生成题目")
         questions = await self._generate_questions(
             article=article,
             difficulty=difficulty,

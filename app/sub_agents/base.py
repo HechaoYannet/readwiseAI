@@ -20,7 +20,7 @@ class BaseSubAgent(ABC):
     description: str = ""
 
     @abstractmethod
-    async def execute(self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState) -> Dict[str, Any]:
+    async def execute(self, input: Dict[str, Any], context: Dict[str, Any], state: "OrchestratorState | None" = None) -> Dict[str, Any]:
         """Execute the sub-task and return a result dict."""
 
     async def _call_llm(self, prompt: str) -> Dict[str, Any]:

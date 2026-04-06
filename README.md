@@ -26,8 +26,9 @@ ReadWise AI 通过 AI 驱动的多个专家 Sub-Agent，为高中生提供**错�
 10. [外部依赖](#10-外部依赖)
 11. [配置与环境变量](#11-配置与环境变量)
 12. [测试](#12-测试)
-13. [POST /api/attempt 代码分析与结果值流动](#13-post-apiattempt-代码分析与结果值流动)
-14. [傻瓜式任务操作指南](#14-傻瓜式任务操作指南)
+13. [OrchestratorState 数据结构](#13-orchestratorstate-数据结构)
+14. [POST /api/attempt 代码分析与结果值流动](#14-post-apiattempt-代码分析与结果值流动)
+15. [傻瓜式任务操作指南](#15-傻瓜式任务操作指南)
 
 ---
 
@@ -59,15 +60,24 @@ POST /api/attempt（异步）
    ▼
 Orchestrator（主控循环）
    ├── Planner：LLM 任务分解 → 生成 SubTask 列表
-   ├── Dispatcher：按依赖顺序分发任务，注入记忆上下文
+   ├── Dispatcher：按依赖顺序逐一分发任务，注入记忆上下文
    │       ├── diagnosis_expert  → 错因分析 + 同类题生成
    │       ├── corpus_expert     → 文章生成（普通/规划/风格化）
    │       ├── question_expert   → 题目生成
    │       └── qa_expert         → 问答（LangChain 工具调用）
-   └── Verifier：验证结果 → 通过则完成，失败则 Replan
+   └── Verifier：每个任务执行后立即验证 → 通过则写入 completed_results，失败则立即 Replan
 
 GET /api/result/{request_id}  （轮询结果）
 ```
+
+**任务调度策略（重构后）：**
+
+| 策略 | 说明 |
+|------|------|
+| **逐任务调度** | Orchestrator 每次只派发一个满足依赖条件的 PENDING 任务 |
+| **立即验证** | 任务执行完成后由 Verifier 立即验收，验收通过才写入 `completed_results` |
+| **即时重试** | 验收失败后立即调用 Planner.replan，任务重置为 PENDING 并在下一次迭代重试，无队列末尾排队 |
+| **依赖解析** | 任务的依赖项必须在 `completed_results` 中存在才被调度，保证跨任务数据准确注入 |
 
 **记忆层（每次请求前 Dispatcher 自动注入）：**
 
@@ -460,7 +470,93 @@ python -m pytest tests/test_agent.py -v
 
 ---
 
-## 13. POST /api/attempt 代码分析与结果值流动
+## 13. OrchestratorState 数据结构
+
+> `app/models/state.py` 中定义的核心状态对象，贯穿整个任务生命周期。
+
+### 13.1 OrchestratorState
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `request_id` | `str` | 必填 | 请求唯一标识，格式 `req_<hex>` |
+| `user_id` | `str` | 必填 | 所属用户 ID |
+| `session_id` | `Optional[str]` | `None` | 会话 ID，用于关联 WorkingMemory；API 层自动生成 |
+| `status` | `RequestStatus` | `PENDING` | 请求整体状态，见下表 |
+| `status_history` | `List[str]` | `[]` | 状态变更日志，供前端轮询展示进度 |
+| `original_request` | `Dict` | `{}` | 原始请求体（AttemptRequest.model_dump()）|
+| `current_plan` | `Dict` | `{}` | Planner 生成的子任务规划（含 overall_goal）|
+| `sub_tasks` | `List[SubTask]` | `[]` | 所有子任务列表（含已完成、失败） |
+| `completed_results` | `Dict[str, Any]` | `{}` | 已通过验证的子任务结果，key=sub_task_id |
+| `retry_count` | `int` | `0` | 全局重试次数（Verifier 累加） |
+| `error_log` | `List[str]` | `[]` | 错误和失败原因记录 |
+| `created_at` | `datetime` | `now()` | 请求创建时间 |
+| `updated_at` | `datetime` | `now()` | 最近更新时间 |
+| `working_memory` | `Optional[Dict]` | `None` | 会话级工作记忆（保留字段，由 Dispatcher 注入） |
+| `long_term_memory` | `Optional[Dict]` | `None` | 用户级长期记忆（保留字段） |
+
+### 13.2 RequestStatus 枚举
+
+| 值 | 说明 |
+|----|------|
+| `PENDING` | 初始状态，等待 Planner 规划 |
+| `PLANNING` | Planner 正在分解任务 |
+| `WAITING` | 等待 Dispatcher 调度任务 |
+| `RETRY` | 保留状态（兼容性）；新调度逻辑中重试在 WAITING 内联完成 |
+| `COMPLETED` | 所有子任务完成且验收通过 |
+| `FAILED` | 存在不可恢复的子任务失败 |
+
+### 13.3 SubTask
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `sub_task_id` | `str` | 必填 | 子任务 ID，如 `sub_001` |
+| `assigned_to` | `str` | 必填 | 执行 agent 名称 |
+| `description` | `str` | 必填 | 任务描述（Verifier 使用） |
+| `input` | `Dict` | `{}` | 传入 agent.execute() 的输入参数 |
+| `acceptance_criteria` | `List[str]` | `[]` | 验收标准列表 |
+| `depends_on` | `List[str]` | `[]` | 前置依赖的 sub_task_id 列表 |
+| `status` | `SubTaskStatus` | `PENDING` | 子任务状态 |
+| `result` | `Dict` | `{}` | agent 返回的原始结果 |
+| `retry_count` | `int` | `0` | 本任务重试次数 |
+| `error_message` | `str` | `""` | 错误信息 |
+
+### 13.4 SubTaskStatus 枚举
+
+| 值 | 说明 |
+|----|------|
+| `PENDING` | 等待调度 |
+| `RUNNING` | 正在执行 |
+| `COMPLETED` | 执行完成且验收通过，结果写入 `completed_results` |
+| `RETRY` | 验收失败，Planner.replan 后立即重置为 PENDING |
+| `FAILED` | 超过最大重试次数，最终失败 |
+
+### 13.5 调度流程说明（重构后）
+
+```
+_run() 迭代循环（最多 20 次）：
+
+  PENDING  → Planner.plan()         → WAITING
+  WAITING  → 查找下一个满足依赖的 PENDING 任务
+             │ 有 → Dispatcher.execute_single()
+             │       ├── 成功(COMPLETED) → Verifier.verify()
+             │       │     ├── 验收通过 → 写入 completed_results → 注入新子任务
+             │       │     └── 验收失败 → Planner.replan() → 任务回到 PENDING（即时重试）
+             │       └── 异常(FAILED)  → 继续（等待其他任务）
+             └── 无  → _all_tasks_done() ?
+                         ├── 有失败 → FAILED
+                         └── 全通过 → COMPLETED
+  COMPLETED / FAILED → _finalize()
+```
+
+**关键改进（相较于旧版本）：**
+
+1. **立即验证**：任务完成后立即调用 Verifier，而非批量等待全队列完成。
+2. **依赖正确解析**：`_deps_satisfied` 检查 `completed_results`（已验证的结果），保证 `article_task_id` 等跨任务依赖的数据完整性。
+3. **即时重试**：验收失败后立即 replan，任务不再排到队列末尾。
+
+---
+
+## 14. POST /api/attempt 代码分析与结果值流动
 
 > 本节对 `POST /api/attempt` 涉及的全部代码进行逐层分析，梳理各参数情况下的值流动，并给出所有情况下 `GET /api/result` 的 JSON 结构。
 
@@ -718,7 +814,7 @@ WAITING:
 
 ---
 
-## 14. 傻瓜式任务操作指南
+## 15. 傻瓜式任务操作指南
 
 > 详细 JSON 结构示例和通用轮询代码请参见 [docs/frontend_follow.md §13-§14](docs/frontend_follow.md)。
 

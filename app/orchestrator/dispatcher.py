@@ -39,7 +39,7 @@ def _build_memory_context(state: OrchestratorState) -> Dict[str, Any]:
     ctx: Dict[str, Any] = {}
 
     # Working memory
-    session_id = state.session_id
+    session_id = state.session_id or ""
     try:
         from app.models.working_memory import WorkingMemory
 
@@ -92,10 +92,26 @@ def _resolve_task_inputs(task: SubTask, state: OrchestratorState) -> None:
 
 
 class Dispatcher:
+    async def execute_single(
+            self, task: SubTask, state: OrchestratorState
+    ) -> OrchestratorState:
+        """Execute a single sub-task and return the updated state.
+
+        The task must already have its dependencies satisfied.  After execution
+        the task status will be COMPLETED (on success) or FAILED (on error).
+        """
+        return await self._execute_task(task, state)
+
     async def dispatch_all_pending(
             self, state: OrchestratorState
     ) -> OrchestratorState:
-        """Execute all PENDING sub-tasks whose dependencies are satisfied."""
+        """Execute all PENDING sub-tasks whose dependencies are satisfied.
+
+        .. deprecated::
+            Prefer ``execute_single`` called from the Orchestrator loop so that
+            each task is verified immediately after completion.  This method is
+            retained for backward compatibility with tests and external callers.
+        """
         for task in state.sub_tasks:
             if task.status != SubTaskStatus.PENDING:
                 continue
