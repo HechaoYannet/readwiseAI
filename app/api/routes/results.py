@@ -48,6 +48,7 @@ async def get_result(
             "request_id": request_id,
             "session_id": state.session_id,
             "status": "completed",
+            "status_history": state.status_history,
             "results": state.completed_results,
             "error_log": state.error_log,
         }
@@ -59,7 +60,8 @@ async def get_result(
         return {
             "request_id": request_id,
             "status": "failed",
+            "status_history": state.status_history,
             "error_log": state.error_log,
         }
 
-    return {"request_id": request_id, "status": state.status_history}
+    return {"request_id": request_id, "status": state.status, "status_history": state.status_history}

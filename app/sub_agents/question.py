@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Dict, List
-from string import  Template
+from string import Template
 
 from app.models.state import OrchestratorState
 from app.sub_agents.base import BaseSubAgent
@@ -50,7 +50,7 @@ class QuestionExpert(BaseSubAgent):
     description = "题目生成、选项设计（支持连续出题）"
 
     async def execute(
-        self, input: Dict[str, Any], context: Dict[str, Any],state: OrchestratorState
+            self, input: Dict[str, Any], context: Dict[str, Any], state: OrchestratorState
     ) -> Dict[str, Any]:
         start = time.time()
         article = input.get("article", "")
@@ -65,9 +65,9 @@ class QuestionExpert(BaseSubAgent):
             else _DEFAULT_QUESTION_TYPES[:count],
         )
         # Ensure we have exactly `count` entries (cycle using modulo)
-        if len(question_types) < count:
-            question_types = [question_types[i % len(question_types)] for i in range(count)]
-        question_types = question_types[:count]
+        # if len(question_types) < count:
+        #     question_types = [question_types[i % len(question_types)] for i in range(count)]
+        # question_types = question_types[:count]
 
         # Fetch corpus examples for style reference
         corpus_examples = self._get_corpus_examples(difficulty, context)
@@ -106,12 +106,12 @@ class QuestionExpert(BaseSubAgent):
             return "（暂无语料库参考样例）"
 
     async def _generate_questions(
-        self,
-        article: str,
-        difficulty: str,
-        question_types: List[str],
-        count: int,
-        corpus_examples: str,
+            self,
+            article: str,
+            difficulty: str,
+            question_types: List[str],
+            count: int,
+            corpus_examples: str,
     ) -> List[Dict[str, Any]]:
         """Call LLM once to generate all questions in a single request."""
         _type_names = {
@@ -120,10 +120,13 @@ class QuestionExpert(BaseSubAgent):
             "vocabulary": "词义题",
             "main_idea": "主旨题",
         }
-        question_types_str = "\n".join(
-            f"{i + 1}. {qt}（{_type_names.get(qt, qt)}）"
-            for i, qt in enumerate(question_types)
-        )
+        if question_types:
+            question_types_str = "\n".join(
+                f"{i + 1}. {qt}（{_type_names.get(qt, qt)}）"
+                for i, qt in enumerate(question_types)
+            )
+        else:
+            question_types_str = "根据 **参考语料** 的题目类型自由决定"
 
         template = self.load_prompt("question_prompt") or _FALLBACK_PROMPT
         prompt = Template(template).substitute(

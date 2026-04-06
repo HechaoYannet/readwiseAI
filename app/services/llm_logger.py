@@ -43,8 +43,8 @@ _ctx_task_id: ContextVar[str] = ContextVar("llm_log_task_id", default="")
 # Configuration
 # ---------------------------------------------------------------------------
 _LOG_DIR = Path("data/logs/llm")
-_MAX_PROMPT_PREVIEW = 2000   # chars shown in log (full prompt may be very long)
-_MAX_OUTPUT_PREVIEW = 4000
+_MAX_PROMPT_PREVIEW = 5000  # chars shown in log (full prompt may be very long)
+_MAX_OUTPUT_PREVIEW = 5000  # chars shown in log (full response may be very long)
 
 
 # ---------------------------------------------------------------------------
@@ -127,16 +127,17 @@ def with_context(request_id: str, agent_name: str, task_id: str):
 
     return decorator
 
+
 def get_request_id() -> str:
     """Return the request_id currently active in this context."""
     return _ctx_request_id.get()
 
 
 def log_request_start(
-    request_id: str,
-    session_id: str,
-    user_id: str,
-    payload: Dict[str, Any],
+        request_id: str,
+        session_id: str,
+        user_id: str,
+        payload: Dict[str, Any],
 ) -> None:
     """Write the opening section of a request log file."""
     import json as _json
@@ -160,12 +161,12 @@ def log_request_start(
 
 
 def log_llm_call(
-    prompt: str,
-    raw_response: str,
-    parsed: Dict[str, Any],
-    latency_ms: int,
-    success: bool,
-    error: str = "",
+        prompt: str,
+        raw_response: str,
+        parsed: Dict[str, Any],
+        latency_ms: int,
+        success: bool,
+        error: str = "",
 ) -> None:
     """Write one LLM call record to the active request's log file.
 
@@ -182,10 +183,10 @@ def log_llm_call(
 
     # Truncate very long prompts/responses to keep logs readable
     prompt_display = prompt if len(prompt) <= _MAX_PROMPT_PREVIEW else (
-        prompt[_MAX_PROMPT_PREVIEW:] + f"\n… [前半截断, 共 {len(prompt)} 字符]"
+            prompt[_MAX_PROMPT_PREVIEW:] + f"\n… [前半截断, 共 {len(prompt)} 字符]"
     )
     response_display = raw_response if len(raw_response) <= _MAX_OUTPUT_PREVIEW else (
-        raw_response[:_MAX_OUTPUT_PREVIEW] + f"\n… [后半截断, 共 {len(raw_response)} 字符]"
+            raw_response[:_MAX_OUTPUT_PREVIEW] + f"\n… [后半截断, 共 {len(raw_response)} 字符]"
     )
 
     status_icon = "✅" if success else "❌"

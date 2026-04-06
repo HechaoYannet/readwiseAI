@@ -67,3 +67,12 @@ Authorization: Bearer {{auth_token}}
   "user_level": null,
   "question_number": null
 }
+> {%
+    // 提取 request_id 供后续请求使用
+    client.global.set("request_id", response.body.request_id);
+%}
+
+### GET request to retrieve attempt result
+GET http://localhost:8000/api/result/{{request_id}}
+Authorization: Bearer {{auth_token}}
+Content-Type: application/json

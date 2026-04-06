@@ -79,14 +79,14 @@ $power_summary
 {{
   "articles": [
     {{
-      "idx": 1,
-      "topic": "环境保护",
+      "idx": 1, //按顺序编号；与题库中"section"的对应关系：第1篇文章对应 Section A，第2篇对应 Section B，以此类推
+      "topic": "", //根据高考真题常见主题决定，例如：科技与人文传承
       "reference_id": "gk_2024_001",
-      "grammar_points": ["定语从句", "状语从句"],
-      "difficulty": "L2",
-      "word_count": 280,
-      "genre": "expository",
-      "description": "关于海洋塑料污染的说明文，重点考查细节题和推理题"
+      "grammar_points": [], //可选：三大从句（尤其定语从句、名词性从句）、非谓语动词、时态语态、倒装强调句、动作逻辑
+      "difficulty": "", //L1/L2/L3/L4
+      "word_count": "", //根据难度、参考真题和学生情况灵活调整，通常在250-500词之间
+      "genre": "", //argumentative/expository/narrative
+      "description": "" //出题描述，例如：关于海洋塑料污染的说明文，重点考查细节题和推理题
     }}
   ]
 }}
@@ -155,10 +155,10 @@ def _build_training_sub_tasks(training_plan: List[Dict[str, Any]]) -> List[Dict[
             "input": {
                 "article_task_id": corpus_id,  # resolved by dispatcher at runtime
                 "difficulty": spec.get("difficulty", "L2"),
-                "count": 4,
-                "question_types": ["detail", "inference", "vocabulary", "main_idea"],
+                "count": 4, # 或根据语料调整题目数量
+                "question_types": [], #自己决定
             },
-            "acceptance_criteria": ["题目数量等于4"],
+            "acceptance_criteria": [],
             "depends_on": [corpus_id],
         })
 
@@ -194,7 +194,7 @@ class CorpusExpert(BaseSubAgent):
         # Build style reference block
         style_reference = self._get_style_reference(reference_id, context)
         if grammar_points:
-            style_reference += f"\n重点语法点：{', '.join(grammar_points)}"
+            style_reference += f"\n\n## 重点语法点：{', '.join(grammar_points)}"
 
         # Load prompt template from file; fall back to inline template
         template = self.load_prompt("corpus_prompt") or ARTICLE_PROMPT

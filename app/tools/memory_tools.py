@@ -10,6 +10,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from langchain_core.tools import tool
+from typing_extensions import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -124,15 +125,17 @@ def search_mistakes(keyword: str = "", error_category: str = "", question_type: 
 # ---------------------------------------------------------------------------
 
 @tool
-def search_corpus(difficulty: str = "", genre: str = "") -> str:
+def search_corpus(difficulty: str = "", genre: str = "", section: Literal["A", "B", "C", "D"] | None = None) -> str:
     """搜索高考真题语料库，返回相关文章摘要。
 
     当需要参考真题风格、举例说明高考阅读特点时使用。
-    支持按难度（L1-L4）和体裁（argumentative/expository/narrative）过滤。
+    支持按难度（L1-L4）和体裁（argumentative/expository/narrative）和文章编号（A/B/C/D）过滤。
+    注意：为保证获取信息全面性， **不建议** 指定任何过滤条件，除非明确需要特定文章。
 
     Args:
-        difficulty: 难度等级，L1/L2/L3/L4。
+        difficulty: 难度等级，L1/L2/L3/L4
         genre: 文章体裁，argumentative议论文/expository说明文/narrative记叙文。
+        section: 文章编号，A/B/C/D（可选，提供后返回对应文章，否则返回多篇相关摘要）。
     """
     repo = _context.get("corpus_repo")
     if repo is None:
@@ -144,7 +147,8 @@ def search_corpus(difficulty: str = "", genre: str = "") -> str:
     return repo.format_examples_for_prompt(
         difficulty=difficulty or None,
         genre=genre or None,
-        count=1,
+        section=section or None,
+        count=12,
     )
 
 
