@@ -1,11 +1,12 @@
 """User service layer – business logic for user management."""
 from __future__ import annotations
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.invite import InviteCode, InviteStore
-from app.models.user import User, UserStatus, UserStore
+from app.models.user import User, UserRole, UserStatus, UserStore
 
 logger = logging.getLogger(__name__)
 
@@ -227,4 +228,47 @@ def get_invite(code: str) -> Optional[InviteCode]:
 
 def revoke_invite(code: str) -> bool:
     return _invite_store.revoke(code)
+
+
+def ensure_bootstrap_admin() -> Optional[User]:
+    """Create or repair the bootstrap admin account from environment variables."""
+    username = os.getenv("ADMIN_BOOTSTRAP_USERNAME", "").strip()
+    password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD", "").strip()
+    if not username or not password:
+        return None
+
+    ok, err = _validate_password(password, password)
+    if not ok:
+        raise RuntimeError(f"Invalid ADMIN_BOOTSTRAP_PASSWORD: {err}")
+
+    from app.auth.password import hash_password
+
+    hashed = hash_password(password)
+    existing = _user_store.get_by_username(username)
+    if existing is not None:
+        updated = _user_store.update(
+            existing.id,
+            password_hash=hashed,
+            role=UserRole.ADMIN.value,
+            status=UserStatus.ACTIVE.value,
+            exam_region=existing.exam_region or "全国",
+            grade=existing.grade or "管理员",
+            school=existing.school or "ReadWise AI",
+        )
+        logger.info("Bootstrap admin account updated: %s", username)
+        return updated
+
+    user = User(
+        username=username,
+        password_hash=hashed,
+        invite_code="ADMINBOOT",
+        exam_region="全国",
+        grade="管理员",
+        school="ReadWise AI",
+        role=UserRole.ADMIN,
+        status=UserStatus.ACTIVE,
+    )
+    _user_store.create(user)
+    logger.info("Bootstrap admin account created: %s", username)
+    return user
 

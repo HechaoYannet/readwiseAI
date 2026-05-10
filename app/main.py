@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import attempts, callback, results, auth, users, memory, sessions, admin
 from app.config import load_settings
+from app.services.user_service import ensure_bootstrap_admin
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,6 +34,11 @@ app.include_router(sessions.router, prefix="/api")
 
 # Internal callback (sub-agent → orchestrator)
 app.include_router(callback.router, prefix="/internal")
+
+
+@app.on_event("startup")
+async def bootstrap_admin_account() -> None:
+    ensure_bootstrap_admin()
 
 
 @app.get("/")
