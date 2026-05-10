@@ -25,6 +25,7 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     user_id: str
     username: str
+    role: str = "user"
     access_token: str
     token_type: str = "bearer"
 
@@ -37,6 +38,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     user_id: str
     username: str
+    role: str = "user"
     access_token: str
     token_type: str = "bearer"
 

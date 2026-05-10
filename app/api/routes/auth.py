@@ -49,6 +49,7 @@ async def register(body: RegisterRequest, request: Request) -> RegisterResponse:
     return RegisterResponse(
         user_id=user.id,
         username=user.username,
+        role=user.role.value,
         access_token=token,
     )
 
@@ -66,6 +67,7 @@ async def login(body: LoginRequest) -> LoginResponse:
     return LoginResponse(
         user_id=user.id,
         username=user.username,
+        role=user.role.value,
         access_token=token,
     )
 

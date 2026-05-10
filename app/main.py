@@ -3,7 +3,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import attempts, callback, results, auth, users, memory, sessions
+from app.api.routes import attempts, callback, results, auth, users, memory, sessions, admin
 from app.config import load_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +23,7 @@ app.add_middleware(
 # Auth & user routes
 app.include_router(auth.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 # Public API
 app.include_router(attempts.router, prefix="/api")

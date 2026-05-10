@@ -26,7 +26,7 @@ async def get_me(token_data: TokenData = Depends(get_current_user)) -> Dict[str,
     user = user_service.get_user(token_data.user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    return user.model_dump(exclude={"invite_code"})
+    return user.model_dump(exclude={"invite_code", "password_hash"})
 
 
 @router.put("/me")
@@ -42,7 +42,7 @@ async def update_me(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="更新失败（用户名可能已被占用）",
         )
-    return updated.model_dump(exclude={"invite_code"})
+    return updated.model_dump(exclude={"invite_code", "password_hash"})
 
 
 @router.get("/stats")
