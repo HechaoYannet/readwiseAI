@@ -36,6 +36,14 @@ def _normalize_provider(provider: str) -> str:
     return value if value in {"openai", "deepseek", "stub"} else ""
 
 
+def _get_provider_api_key(provider: str) -> str:
+    if provider == "openai":
+        return os.getenv("OPENAI_API_KEY", "").strip()
+    if provider == "deepseek":
+        return os.getenv("DEEPSEEK_API_KEY", "").strip()
+    return ""
+
+
 def _build_effective_config() -> Dict[str, Any]:
     runtime_config = load_runtime_config().get("llm", {})
     provider = _normalize_provider(runtime_config.get("provider", ""))
@@ -53,11 +61,10 @@ def _build_effective_config() -> Dict[str, Any]:
     if temperature is None:
         temperature = _DEFAULT_TEMPERATURE
 
-    api_key = (runtime_config.get("api_key") or "").strip()
+    api_key = _get_provider_api_key(provider)
     if provider == "openai":
-        api_key = api_key or os.getenv("OPENAI_API_KEY", "").strip()
+        api_key = api_key or ""
     elif provider == "deepseek":
-        api_key = api_key or os.getenv("DEEPSEEK_API_KEY", "").strip()
         if not base_url:
             base_url = _DEFAULT_DEEPSEEK_BASE_URL
     else:
@@ -83,7 +90,7 @@ def get_public_runtime_llm_config() -> Dict[str, Any]:
         "temperature": effective["temperature"],
         "base_url": effective["base_url"],
         "has_api_key": bool(effective["api_key"]),
-        "api_key_source": "runtime" if bool(runtime_llm.get("api_key")) else ("environment" if bool(effective["api_key"]) else "unset"),
+        "api_key_source": "environment" if bool(effective["api_key"]) else "unset",
         "runtime_overrides": {
             "provider": bool(runtime_llm.get("provider")),
             "model": bool(runtime_llm.get("model")),
@@ -99,16 +106,17 @@ def update_runtime_llm_config(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
     base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Update persisted runtime LLM config and reset the singleton."""
+    normalized_provider = _normalize_provider(provider)
+    if normalized_provider in {"openai", "deepseek"} and not _get_provider_api_key(normalized_provider):
+        raise ValueError(f"{normalized_provider.upper()} API key is not configured in environment")
     current = load_runtime_config().get("llm", {})
     new_values = {
-        "provider": _normalize_provider(provider),
+        "provider": normalized_provider,
         "model": model.strip() if isinstance(model, str) else current.get("model", ""),
         "temperature": float(temperature) if temperature is not None else current.get("temperature"),
         "base_url": (base_url or "").strip().rstrip("/") if base_url is not None else current.get("base_url", ""),
-        "api_key": (api_key or "").strip() if api_key is not None else current.get("api_key", ""),
     }
     update_runtime_config("llm", new_values)
     reset_llm()

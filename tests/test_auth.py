@@ -2,6 +2,7 @@
 from __future__ import annotations
 import pytest
 import jwt as pyjwt
+from fastapi.testclient import TestClient
 
 
 # ===================================================================
@@ -51,6 +52,16 @@ class TestJWTHandler:
         }
         token = pyjwt.encode(payload, _SECRET_KEY, algorithm=_ALGORITHM)
         assert should_refresh(token) is True
+
+    def test_refresh_endpoint_rejects_early_refresh(self):
+        from app.main import app
+        from app.auth.jwt_handler import create_access_token
+
+        client = TestClient(app)
+        token = create_access_token("user_123", role="user")
+        response = client.post("/api/auth/refresh", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Token does not need refresh yet"
 
 
 # ===================================================================
@@ -235,20 +246,24 @@ class TestLoginUser:
     def teardown_method(self):
         import app.models.user as user_module
         import app.models.invite as invite_module
+        import app.services.login_rate_limiter as rate_limiter_module
         user_module._USERS_FILE = self._orig_users_file
         invite_module._INVITES_FILE = self._orig_invites_file
         import app.services.user_service as svc
         svc._user_store = user_module.UserStore()
         svc._invite_store = invite_module.InviteStore()
+        rate_limiter_module._FAILURES.clear()
 
     def _setup_tmp(self, tmp_path):
         import app.models.user as user_module
         import app.models.invite as invite_module
         import app.services.user_service as svc
+        import app.services.login_rate_limiter as rate_limiter_module
         user_module._USERS_FILE = tmp_path / "users.json"
         invite_module._INVITES_FILE = tmp_path / "invites.json"
         svc._user_store = user_module.UserStore()
         svc._invite_store = invite_module.InviteStore()
+        rate_limiter_module._FAILURES.clear()
 
     def test_login_success(self, tmp_path):
         self._setup_tmp(tmp_path)
@@ -275,6 +290,28 @@ class TestLoginUser:
         user, err = login_user("不存在的用户", "password123")
         assert user is None
         assert err != ""
+
+    def test_login_route_rate_limits_repeated_failures(self, tmp_path):
+        self._setup_tmp(tmp_path)
+        from app.main import app
+        from app.services.user_service import create_invite, register_user
+
+        invite = create_invite(max_uses=1)
+        register_user(invite.code, "限流用户", "全国I卷", "password123", "password123")
+
+        client = TestClient(app)
+        for _ in range(10):
+            response = client.post(
+                "/api/auth/login",
+                json={"login_id": "限流用户", "password": "wrongpassword"},
+            )
+            assert response.status_code == 401
+
+        blocked = client.post(
+            "/api/auth/login",
+            json={"login_id": "限流用户", "password": "wrongpassword"},
+        )
+        assert blocked.status_code == 429
 
 
 # ===================================================================

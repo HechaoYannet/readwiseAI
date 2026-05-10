@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from pip._internal.network import session
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import TokenData

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, status, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.auth.dependencies import get_current_user
 from app.auth.jwt_handler import create_access_token, should_refresh
@@ -14,9 +15,11 @@ from app.auth.models import (
     VerifyInviteRequest,
     VerifyInviteResponse,
 )
+from app.services import login_rate_limiter
 from app.services import user_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+_bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("/verify-invite", response_model=VerifyInviteResponse)
@@ -55,14 +58,23 @@ async def register(body: RegisterRequest, request: Request) -> RegisterResponse:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(body: LoginRequest) -> LoginResponse:
+async def login(body: LoginRequest, request: Request) -> LoginResponse:
     """Login with username / phone / email and password."""
+    client_ip = request.client.host if request.client else ""
+    allowed, retry_after = login_rate_limiter.check_allowed(client_ip, body.login_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"登录尝试过多，请 {retry_after} 秒后重试",
+        )
     user, error = user_service.login_user(body.login_id, body.password)
     if user is None:
+        login_rate_limiter.record_failure(client_ip, body.login_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error,
         )
+    login_rate_limiter.clear_failures(client_ip, body.login_id)
     token = create_access_token(user_id=user.id, role=user.role.value)
     return LoginResponse(
         user_id=user.id,
@@ -81,8 +93,14 @@ async def logout() -> dict:
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_token(
         token_data=Depends(get_current_user),
+        credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> RefreshResponse:
     """Issue a new token if the current one is close to expiry."""
+    if credentials is None or not should_refresh(credentials.credentials):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token does not need refresh yet",
+        )
     new_token = create_access_token(
         user_id=token_data.user_id, role=token_data.role
     )

@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -13,12 +14,15 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.auth.dependencies import get_admin_user
 from app.auth.models import TokenData
+from app.models import long_term_memory as ltm_module
 from app.models.user import UserRole, UserStatus, UserStore
 from app.models.working_memory import WorkingMemory
 from app.models import working_memory as wm_module
+from app.orchestrator import checkpoint as checkpoint_module
 from app.services import llm_service, user_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 _SAFE_ID_PATTERN = re.compile(r"^[\w\-]+$")
 _SAFE_INVITE_PATTERN = re.compile(r"^[A-Z0-9]{6,32}$")
@@ -27,6 +31,7 @@ _MAX_PAGE_LIMIT = 200
 _MAX_NOTE_LEN = 200
 _MAX_MODEL_LEN = 100
 _MAX_BASE_URL_LEN = 200
+_QUARANTINE_ROOT = Path(__file__).resolve().parents[3] / "data" / "admin" / "quarantine"
 
 
 def _require_safe_id(value: str, field_name: str) -> str:
@@ -81,6 +86,65 @@ def _load_session_for_admin(user_id: str, session_id: str) -> WorkingMemory:
     return wm
 
 
+def _user_data_locations(user_id: str) -> List[tuple[str, Path]]:
+    return [
+        ("sessions", wm_module._safe_user_dir(wm_module._SESSIONS_DIR, user_id)),
+        ("long_term", ltm_module._safe_user_dir(ltm_module._LONG_TERM_DIR, user_id)),
+        ("orchestrator", checkpoint_module._safe_user_dir(checkpoint_module.BASE_DIR, user_id)),
+    ]
+
+
+def _quarantine_user_data(user_id: str) -> tuple[Path, List[tuple[Path, Path]]]:
+    quarantine_root = _QUARANTINE_ROOT / f"{user_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
+    moved: List[tuple[Path, Path]] = []
+    for label, source in _user_data_locations(user_id):
+        if not source.exists():
+            continue
+        target = quarantine_root / label / user_id
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(target))
+        moved.append((source, target))
+    return quarantine_root, moved
+
+
+def _restore_quarantined_user_data(moved: List[tuple[Path, Path]], quarantine_root: Path) -> None:
+    for destination, source in reversed(moved):
+        if not source.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+    if quarantine_root.exists():
+        shutil.rmtree(quarantine_root, ignore_errors=True)
+
+
+def _collect_request_indexes(user_id: str) -> Dict[Path, str]:
+    if not checkpoint_module.INDEX_DIR.exists():
+        return {}
+    matches: Dict[Path, str] = {}
+    for path in checkpoint_module.INDEX_DIR.iterdir():
+        if not path.is_file():
+            continue
+        try:
+            owner = path.read_text(encoding="utf-8").strip()
+        except Exception:
+            continue
+        if owner == user_id:
+            matches[path] = owner
+    return matches
+
+
+def _delete_request_indexes(entries: Dict[Path, str]) -> None:
+    for path in entries:
+        if path.exists():
+            path.unlink()
+
+
+def _restore_request_indexes(entries: Dict[Path, str]) -> None:
+    checkpoint_module.INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    for path, owner in entries.items():
+        path.write_text(owner, encoding="utf-8")
+
+
 class AdminUserUpdateRequest(BaseModel):
     username: Optional[str] = Field(default=None, min_length=1, max_length=50)
     exam_region: Optional[str] = Field(default=None, min_length=1, max_length=50)
@@ -112,7 +176,6 @@ class LLMConfigUpdateRequest(BaseModel):
     model: Optional[str] = Field(default=None, min_length=1, max_length=_MAX_MODEL_LEN)
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     base_url: Optional[str] = Field(default=None, max_length=_MAX_BASE_URL_LEN)
-    api_key: Optional[str] = Field(default=None, min_length=1, max_length=300)
 
     @field_validator("base_url")
     @classmethod
@@ -198,15 +261,28 @@ async def admin_delete_user(
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
 
-    if not user_service.delete_user(user_id):
+    quarantine_root, moved_paths = _quarantine_user_data(user_id)
+    request_indexes = _collect_request_indexes(user_id)
+
+    try:
+        if not user_service.delete_user(user_id):
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="删除用户失败")
+        _delete_request_indexes(request_indexes)
+    except HTTPException:
+        _restore_request_indexes(request_indexes)
+        _restore_quarantined_user_data(moved_paths, quarantine_root)
+        raise
+    except Exception:
+        _restore_request_indexes(request_indexes)
+        _restore_quarantined_user_data(moved_paths, quarantine_root)
+        UserStore().create(existing)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="删除用户失败")
 
     try:
-        user_dir = wm_module._safe_user_dir(wm_module._SESSIONS_DIR, user_id)
-        if user_dir.exists():
-            shutil.rmtree(user_dir)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="用户已删除，但清理会话数据失败")
+        if quarantine_root.exists():
+            shutil.rmtree(quarantine_root)
+    except Exception as exc:
+        logger.warning("Failed to purge quarantined user data for %s: %s", user_id, exc)
 
     return {"message": "用户已删除", "user_id": user_id}
 
@@ -348,11 +424,13 @@ async def admin_update_llm_config(
 ) -> Dict[str, Any]:
     if payload.provider not in _ALLOWED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的 provider")
-    llm_service.update_runtime_llm_config(
-        provider=payload.provider,
-        model=payload.model,
-        temperature=payload.temperature,
-        base_url=payload.base_url,
-        api_key=payload.api_key,
-    )
+    try:
+        llm_service.update_runtime_llm_config(
+            provider=payload.provider,
+            model=payload.model,
+            temperature=payload.temperature,
+            base_url=payload.base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return llm_service.get_public_runtime_llm_config()

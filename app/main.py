@@ -16,8 +16,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allowed_origins,
     allow_credentials=settings.cors_allow_credentials,
-    allow_methods=["*"],  # 允许所有方法，包括 OPTIONS
-    allow_headers=["*"],  # 允许所有请求头
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Auth & user routes

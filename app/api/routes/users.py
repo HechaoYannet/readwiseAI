@@ -14,10 +14,10 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 class UpdateUserRequest(BaseModel):
-    username: str = ""
-    exam_region: str = ""
-    grade: str = ""
-    school: str = ""
+    username: str | None = None
+    exam_region: str | None = None
+    grade: str | None = None
+    school: str | None = None
 
 
 @router.get("/me")
@@ -91,10 +91,12 @@ async def change_password(
 @router.get("/train/currSession")
 async def get_current_training_session(token_data: TokenData = Depends(get_current_user)) -> Dict[str, Any]:
     """Get the current training session for the user."""
-    session = working_memory.WorkingMemory.load_session_list(
+    session_ids = working_memory.WorkingMemory.load_session_list(
         "training", token_data.user_id
-    )[0]
-    session = working_memory.WorkingMemory.load(session_id=session, user_id=token_data.user_id).model_dump()
+    )
+    if not session_ids:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="没有正在进行的训练")
+    session = working_memory.WorkingMemory.load(session_id=session_ids[0], user_id=token_data.user_id)
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="没有正在进行的训练")
-    return session
+    return session.model_dump()

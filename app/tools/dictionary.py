@@ -9,10 +9,9 @@ import hashlib
 import logging
 import os
 import time
-from typing import Any, Dict
-from dotenv import load_dotenv
-import asyncio
+
 import httpx
+from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -45,7 +44,8 @@ async def lookup_word(word: str):
         return {
             "word": word,
             "definitions": [f"[模拟] {word}: 请配置 API 密钥"],
-            "success": False
+            "translation": [f"[模拟] {word}: 请配置 API 密钥"],
+            "success": False,
         }
 
     salt = str(int(time.time() * 1000))
@@ -68,13 +68,32 @@ async def lookup_word(word: str):
             data = resp.json()
 
         if data.get("errorCode") != "0":
-            return {"word": word, "translation": [f"[错误] {word}: API失败"], "success": False}
+            fallback = [f"[错误] {word}: API失败"]
+            return {
+                "word": word,
+                "definitions": fallback,
+                "translation": fallback,
+                "success": False,
+            }
 
         explains = data.get("translation", [])
-        return {"word": word, "translation": explains[0], "success": True}
+        definitions = explains if isinstance(explains, list) else [str(explains)]
+        first_translation = definitions[0] if definitions else ""
+        return {
+            "word": word,
+            "definitions": definitions,
+            "translation": first_translation,
+            "success": True,
+        }
 
     except Exception as e:
-        return {"word": word, "translation": [f"[异常] {word}: {e}"], "success": False}
+        fallback = [f"[异常] {word}: {e}"]
+        return {
+            "word": word,
+            "definitions": fallback,
+            "translation": fallback,
+            "success": False,
+        }
 
 
 

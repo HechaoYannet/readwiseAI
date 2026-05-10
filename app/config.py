@@ -24,6 +24,21 @@ class Settings:
     cors_allow_credentials: bool
 
 
+def current_env() -> str:
+    return (
+        os.getenv("APP_ENV")
+        or os.getenv("ENV")
+        or os.getenv("RAILWAY_ENVIRONMENT")
+        or os.getenv("RAILWAY_ENVIRONMENT_NAME")
+        or os.getenv("VERCEL_ENV")
+        or "development"
+    ).strip().lower()
+
+
+def is_production_env() -> bool:
+    return current_env() in {"prod", "production"}
+
+
 def load_settings() -> Settings:
     raw_origins = os.getenv("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS)
     frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")

@@ -15,13 +15,24 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
         "model": "",
         "temperature": None,
         "base_url": "",
-        "api_key": "",
     }
 }
+
+_ALLOWED_LLM_KEYS = {"provider", "model", "temperature", "base_url"}
 
 
 def _ensure_parent() -> None:
     _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _sanitize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    sanitized = json.loads(json.dumps(_DEFAULT_CONFIG))
+    llm_config = config.get("llm", {})
+    if isinstance(llm_config, dict):
+        for key in _ALLOWED_LLM_KEYS:
+            if key in llm_config:
+                sanitized["llm"][key] = llm_config[key]
+    return sanitized
 
 
 def load_runtime_config() -> Dict[str, Any]:
@@ -33,15 +44,7 @@ def load_runtime_config() -> Dict[str, Any]:
         data = json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             return json.loads(json.dumps(_DEFAULT_CONFIG))
-        merged = json.loads(json.dumps(_DEFAULT_CONFIG))
-        merged.update(data)
-        if not isinstance(merged.get("llm"), dict):
-            merged["llm"] = json.loads(json.dumps(_DEFAULT_CONFIG["llm"]))
-        else:
-            llm = json.loads(json.dumps(_DEFAULT_CONFIG["llm"]))
-            llm.update(merged["llm"])
-            merged["llm"] = llm
-        return merged
+        return _sanitize_config(data)
     except Exception:
         return json.loads(json.dumps(_DEFAULT_CONFIG))
 
@@ -49,12 +52,13 @@ def load_runtime_config() -> Dict[str, Any]:
 def save_runtime_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Persist runtime config atomically."""
     _ensure_parent()
+    sanitized = _sanitize_config(config)
     with _LOCK:
         _CONFIG_FILE.write_text(
-            json.dumps(config, ensure_ascii=False, indent=2),
+            json.dumps(sanitized, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-    return config
+    return sanitized
 
 
 def update_runtime_config(section: str, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,8 +70,6 @@ def update_runtime_config(section: str, values: Dict[str, Any]) -> Dict[str, Any
             section_data = {}
         section_data.update(values)
         config[section] = section_data
-        _CONFIG_FILE.write_text(
-            json.dumps(config, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        return config
+        sanitized = _sanitize_config(config)
+        _CONFIG_FILE.write_text(json.dumps(sanitized, ensure_ascii=False, indent=2), encoding="utf-8")
+        return sanitized

@@ -125,6 +125,15 @@ class TestCheckpointManager:
         assert cm.lookup_user_id("req_idx") == "alice"
         assert cm.lookup_user_id("req_unknown") is None
 
+    def test_lookup_user_id_rejects_invalid_request_id(self, tmp_path):
+        from app.orchestrator.checkpoint import CheckpointManager
+
+        cm = CheckpointManager(
+            base_dir=tmp_path / "users",
+            index_dir=tmp_path / "request_index",
+        )
+        assert cm.lookup_user_id("../bad") is None
+
 
 # ===================================================================
 # 3. Planner
@@ -622,9 +631,25 @@ class TestAPIRoutes:
         r = client.post(
             "/internal/callback/req_nonexistent",
             json={"task_id": "sub_001", "result": {"data": "test"}},
+            headers={"X-Internal-Callback-Token": "readwise-dev-internal-callback-secret"},
         )
         assert r.status_code == 200
         assert r.json()["status"] == "not_found"
+
+    def test_internal_callback_requires_token(self, client):
+        r = client.post(
+            "/internal/callback/req_nonexistent",
+            json={"task_id": "sub_001", "result": {"data": "test"}},
+        )
+        assert r.status_code == 403
+
+    def test_internal_callback_rejects_wrong_token(self, client):
+        r = client.post(
+            "/internal/callback/req_nonexistent",
+            json={"task_id": "sub_001", "result": {"data": "test"}},
+            headers={"X-Internal-Callback-Token": "wrong-token"},
+        )
+        assert r.status_code == 403
 
 
 # ===================================================================

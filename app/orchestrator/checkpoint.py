@@ -18,6 +18,7 @@ INDEX_DIR = Path("data/request_index")
 
 # Validate user IDs to prevent path traversal – same pattern as mistakes.py.
 _USER_ID_PATTERN = re.compile(r"^[\w\-]+$")
+_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 
 def _safe_user_dir(base_dir: Path, user_id: str) -> Path:
@@ -55,11 +56,16 @@ class CheckpointManager:
         return d
 
     def _index_path(self, request_id: str) -> Path:
+        if not _REQUEST_ID_PATTERN.match(request_id):
+            raise ValueError(f"Invalid request_id: {request_id!r}")
         return self.index_dir / request_id
 
     def lookup_user_id(self, request_id: str) -> Optional[str]:
         """Return the user_id that owns *request_id*, or None if unknown."""
-        p = self._index_path(request_id)
+        try:
+            p = self._index_path(request_id)
+        except ValueError:
+            return None
         if not p.exists():
             return None
         return p.read_text(encoding="utf-8").strip()
