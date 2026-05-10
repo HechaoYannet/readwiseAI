@@ -1,0 +1,8 @@
+{
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "temperature": 1.3,
+    "base_url": "https://toddeverett-ohmyapi.hf.space/v1"
+  }
+}
