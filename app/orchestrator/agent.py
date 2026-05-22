@@ -49,6 +49,7 @@ class Orchestrator:
                     state.status = RequestStatus.FAILED
                     break
                 state.status = RequestStatus.WAITING
+                self.checkpoint.save(state)
 
             # 调度器和验收器：每次只执行一个任务，立即验收
             elif state.status == RequestStatus.WAITING:
@@ -64,6 +65,11 @@ class Orchestrator:
                 )
 
                 if next_task is not None:
+                    # Mark as running and persist BEFORE dispatching so pollers
+                    # see up-to-date current_task and task status.
+                    next_task.status = SubTaskStatus.RUNNING
+                    self.checkpoint.save(state)
+
                     # Execute the single task
                     state = await self.dispatcher.execute_single(next_task, state)
 
@@ -78,8 +84,9 @@ class Orchestrator:
                             # Verification failed – immediately replan so the task
                             # is PENDING again and will be dispatched next iteration
                             state = await self.planner.replan(state, next_task)
-                    # If execution itself raised an exception, task.status is FAILED –
-                    # fall through and let the all-done check handle it.
+
+                    # Persist after every task so pollers see up-to-date progress.
+                    self.checkpoint.save(state)
 
                 else:
                     # No pending task with satisfied deps available right now

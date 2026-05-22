@@ -212,6 +212,15 @@ class QAExpert(BaseSubAgent):
                 messages.append(response)
 
                 if not hasattr(response, "tool_calls") or not response.tool_calls:
+                    # If the model returned no content AND no tool calls on the
+                    # first attempt, it likely does not support function calling.
+                    # Fall back to a plain prompt-based call.
+                    if not raw_content and not tool_calls_made:
+                        logger.warning(
+                            "LLM returned empty content with no tool calls; "
+                            "falling back to simple call"
+                        )
+                        return await self._handle_free_simple(user_question)
                     break
 
                 for tc in response.tool_calls:
